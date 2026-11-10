@@ -1,0 +1,92 @@
+{
+  "kind": "real-browser-runtime-not-ui-acceptance",
+  "time": "2026-11-10T19:26:24.130Z",
+  "liveGoogle": "not-run-no-registration",
+  "physicalDevices": "not-tested",
+  "results": [
+    {
+      "role": "administrator",
+      "phase": "initial",
+      "ok": true,
+      "checks": [
+        "loopback secure context",
+        "HttpOnly session is not script-readable",
+        "real Argon2 worker used",
+        "credential deletion persists",
+        "credential edit persists",
+        "concurrent updates preserve both writers",
+        "other Personal vault remains isolated",
+        "server ignores attempted cross-account selection",
+        "real dropped transport rejects save",
+        "failed network save does not replace ciphertext",
+        "secure browser generator works",
+        "incorrect master rejected",
+        "master recovery preserves Household and Personal keyring",
+        "manual lock discards active keys",
+        "login reset preserves decryptable Personal data",
+        "missing real Google registration never claims connection",
+        "backup status truthfully reports no remote protection",
+        "no plaintext or keys in persistent browser stores"
+      ],
+      "workerCount": 4,
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36"
+    },
+    {
+      "role": "member",
+      "phase": "initial",
+      "ok": true,
+      "checks": [
+        "loopback secure context",
+        "HttpOnly session is not script-readable",
+        "real Argon2 worker used",
+        "credential deletion persists",
+        "credential edit persists",
+        "explicit Household grant and transferred key work",
+        "concurrent updates preserve both writers",
+        "other Personal vault remains isolated",
+        "server ignores attempted cross-account selection",
+        "real dropped transport rejects save",
+        "failed network save does not replace ciphertext",
+        "secure browser generator works",
+        "incorrect master rejected",
+        "master recovery preserves Household and Personal keyring",
+        "manual lock discards active keys",
+        "login reset preserves decryptable Personal data",
+        "missing real Google registration never claims connection",
+        "no plaintext or keys in persistent browser stores"
+      ],
+      "workerCount": 4,
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0"
+    },
+    {
+      "role": "member",
+      "phase": "reopen",
+      "ok": true,
+      "checks": [
+        "loopback secure context",
+        "browser cookie survives graceful closure and reopening",
+        "reopened browser decrypts persisted Personal vault",
+        "reopened browser retains Household writes",
+        "server session expiration rejects persisted cookie",
+        "logout revokes browser session"
+      ],
+      "workerCount": 1,
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0"
+    },
+    {
+      "role": "administrator",
+      "phase": "reopen",
+      "ok": true,
+      "checks": [
+        "loopback secure context",
+        "browser cookie survives graceful closure and reopening",
+        "reopened browser decrypts persisted Personal vault",
+        "reopened browser retains Household writes",
+        "server session expiration rejects persisted cookie",
+        "logout revokes browser session"
+      ],
+      "workerCount": 1,
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36"
+    }
+  ]
+}

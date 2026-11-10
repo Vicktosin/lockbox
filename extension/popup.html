@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Lockbox companion</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <h1>Lockbox</h1>
+    <p>Extension candidate — not part of the household release.</p>
+    <form id="configure">
+      <label
+        >Secure Lockbox address<input
+          id="app"
+          type="url"
+          placeholder="https://your-lockbox-address"
+          required /></label
+      ><button>Allow this Lockbox address</button>
+    </form>
+    <p id="site" role="status"></p>
+    <button id="fill">Choose saved login and approve fill</button
+    ><button id="save">Save this entered login</button
+    ><button id="update">Update a saved login</button>
+    <h2>Password generator</h2>
+    <label
+      >Length<input
+        id="length"
+        type="number"
+        min="16"
+        max="64"
+        value="24" /></label
+    ><textarea id="password" readonly aria-label="Generated password"></textarea
+    ><button id="generate">Generate strong password</button
+    ><label
+      ><input id="approve-generation" type="checkbox" />I approve inserting this
+      new password on the displayed website</label
+    ><button id="insert">Insert generated password</button>
+    <p id="status" role="status"></p>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

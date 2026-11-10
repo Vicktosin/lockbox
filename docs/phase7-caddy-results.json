@@ -1,0 +1,11 @@
+{
+  "caddyVersion": "v2.11.9",
+  "publicExposure": false,
+  "productionCaddyfile": "adapted-by-real-caddy",
+  "privateTls": "passed-with-trusted-ephemeral-test-certificate",
+  "authHeaders": "passed-secure-cookie-csp-no-cors-origin-rejection",
+  "errorLogRedaction": "passed-on-real-upstream-failure",
+  "gracefulStop": "passed",
+  "systemd": "not-run-windows-host",
+  "time": "2026-11-10T19:26:53.162Z"
+}

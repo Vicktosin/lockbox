@@ -1,0 +1,22 @@
+{
+  "name": "lockbox-windows-feasibility",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "../../releases/native-proof-build/main/main.mjs",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "package": "node scripts/package.mjs",
+    "test": "node --experimental-strip-types --test --test-concurrency=1 tests/core.mjs tests/oauth.mjs tests/native.mjs",
+    "test:core": "node --experimental-strip-types --test --test-concurrency=1 tests/core.mjs tests/oauth.mjs",
+    "test:packaged": "node --experimental-strip-types --test tests/native.mjs",
+    "start": "electron .",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "libsodium-wrappers-sumo": "0.8.4"
+  },
+  "devDependencies": {
+    "electron": "45.2.3"
+  }
+}

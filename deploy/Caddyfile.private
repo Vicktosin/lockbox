@@ -1,0 +1,37 @@
+# Loopback-only ingress. Tailscale Serve supplies trusted HTTPS outside this process.
+# This file alone does NOT provide HTTPS or establish private-network access.
+{
+ admin off
+ persist_config off
+ auto_https off
+ log default {
+  format filter {
+   wrap json
+   fields {
+    request delete
+   }
+  }
+ }
+}
+http://127.0.0.1:{$LOCKBOX_PRIVATE_HTTP_PORT:8080} {
+ bind 127.0.0.1
+ root * "{$LOCKBOX_RELEASE_ROOT:/opt/lockbox}/dist"
+ encode zstd gzip
+ header {
+  Strict-Transport-Security "max-age=31536000"
+  X-Content-Type-Options "nosniff"
+  Referrer-Policy "no-referrer"
+  Cache-Control "no-store"
+  X-Frame-Options "DENY"
+  Permissions-Policy "camera=(), microphone=(), geolocation=()"
+  Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; worker-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+ }
+ @api path /api/* /healthz
+ handle @api {
+  reverse_proxy 127.0.0.1:{$LOCKBOX_PRIVATE_BACKEND_PORT:8787}
+ }
+ handle {
+  try_files {path} /index.html
+  file_server
+ }
+}

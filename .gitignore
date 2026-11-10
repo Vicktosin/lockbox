@@ -1,0 +1,39 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+extension/dist/
+releases/
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Backend/private environment configuration
+.env
+.env.local
+.env.*
+!.env.example
+server/.data/
+
+# Backend runtime artifacts (including non-default development paths).
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.lbbak

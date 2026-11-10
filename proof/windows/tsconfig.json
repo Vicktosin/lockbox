@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.app.json",
+  "compilerOptions": {
+    "paths": { "@/*": ["../../src/*"] },
+    "tsBuildInfoFile": "../../releases/native-proof-build/proof.tsbuildinfo"
+  },
+  "include": ["renderer/**/*.tsx"]
+}

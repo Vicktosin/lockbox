@@ -1,0 +1,27 @@
+{
+  "time": "2026-11-10T12:21:20.300Z",
+  "platform": "win32",
+  "google": {
+    "developerRegistrationConfigured": false,
+    "normalRedirect": "http://localhost:5173/api/drive/callback",
+    "recoveryRedirect": "http://127.0.0.1:18888/callback",
+    "requiredScope": "https://www.googleapis.com/auth/drive",
+    "connection": "disconnected",
+    "liveTests": "NOT RUN",
+    "reason": "Developer-owned OAuth registration/client configuration absent"
+  },
+  "database": {
+    "schema": "verified",
+    "keyBinding": "verified"
+  },
+  "browsers": {
+    "chrome": true,
+    "edge": true
+  },
+  "caddy": {
+    "verifiedPortableBinary": true,
+    "version": "v2.11.9"
+  },
+  "systemd": "NOT RUN: Windows host",
+  "publicDeployment": "not-performed"
+}

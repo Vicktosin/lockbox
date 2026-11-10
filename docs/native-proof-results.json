@@ -1,0 +1,14 @@
+{
+  "runtime": "packaged Electron",
+  "externalGoogle": "NOT RUN",
+  "simulatedTransport": true,
+  "backendStopped": true,
+  "twoIndependentProcesses": true,
+  "peerStopped": true,
+  "household": true,
+  "conflict": true,
+  "osProtection": true,
+  "rendererBoot": true,
+  "completeLiveProofPassed": false,
+  "time": "2026-11-10T19:30:24.025Z"
+}

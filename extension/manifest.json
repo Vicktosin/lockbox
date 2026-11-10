@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Lockbox approval-based companion (candidate)",
+  "version": "0.1.0",
+  "description": "User-approved form detection, generation, saving, updating and autofill through an unlocked Lockbox session.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "optional_host_permissions": ["https://*/*"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": { "default_popup": "popup.html", "default_title": "Lockbox" },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'"
+  }
+}

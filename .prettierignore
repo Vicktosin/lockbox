@@ -1,0 +1,16 @@
+node_modules
+dist
+coverage
+extension/dist/
+releases/
+package-lock.json
+.env
+.env.*
+!.env.example
+
+# Never scan local keys, databases or backup archives.
+server/.data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.lbbak
