@@ -26,6 +26,7 @@ await test('native OAuth uses a random loopback callback, PKCE, state, offline a
       assert.equal(url.searchParams.get('scope'), FILE_SCOPE)
       assert.equal(url.searchParams.get('code_challenge_method'), 'S256')
       assert.equal(url.searchParams.get('access_type'), 'offline')
+      assert.equal(url.searchParams.get('include_granted_scopes'), 'false')
       assert.equal(url.searchParams.has('client_secret'), false)
       request = url
       const invalid = new URL(url.searchParams.get('redirect_uri'))
@@ -36,6 +37,10 @@ await test('native OAuth uses a random loopback callback, PKCE, state, offline a
       assert.notEqual(callback.port, '8787')
       callback.searchParams.set('state', url.searchParams.get('state'))
       callback.searchParams.set('code', 'fictional-code')
+      callback.searchParams.set(
+        'picked_file_ids',
+        url.searchParams.get('file_ids') ?? '',
+      )
       const response = await fetch(callback)
       assert.equal(response.status, 200)
       assert.equal(response.headers.get('cache-control'), 'no-store')
@@ -91,6 +96,10 @@ await test('folder picker uses the supported native OAuth trigger; restricted Dr
       const callback = new URL(url.searchParams.get('redirect_uri'))
       callback.searchParams.set('state', url.searchParams.get('state'))
       callback.searchParams.set('code', 'fictional-code')
+      callback.searchParams.set(
+        'picked_file_ids',
+        url.searchParams.get('file_ids') ?? '',
+      )
       await fetch(callback)
     },
     fetch: async () => new Response(JSON.stringify(tokens)),
@@ -118,4 +127,38 @@ await test('token refresh is single-flight and never requires a confidential sec
   )
   assert.equal(calls, 1)
   assert.equal(saved.refresh, 'fictional-refresh')
+})
+
+await test('OAuth and refresh reject unexpected broader scopes instead of silently accepting them', async () => {
+  await assert.rejects(
+    () =>
+      nativeAuthorization(configuration, {
+        open: async (value) => {
+          const url = new URL(value),
+            callback = new URL(url.searchParams.get('redirect_uri'))
+          callback.searchParams.set('state', url.searchParams.get('state'))
+          callback.searchParams.set('code', 'fictional-code')
+          callback.searchParams.set(
+            'picked_file_ids',
+            url.searchParams.get('file_ids') ?? '',
+          )
+          await fetch(callback)
+        },
+        fetch: async () =>
+          new Response(
+            JSON.stringify({ ...tokens, scope: FILE_SCOPE + ' ' + FULL_SCOPE }),
+          ),
+      }),
+    /TOKEN_EXCHANGE_FAILED/,
+  )
+  const connection = new GoogleConnection(
+    configuration,
+    { access: 'old', refresh: 'fictional', expires: 0 },
+    () => {},
+    async () =>
+      new Response(
+        JSON.stringify({ ...tokens, scope: FILE_SCOPE + ' ' + FULL_SCOPE }),
+      ),
+  )
+  await assert.rejects(() => connection.access(), /RECONNECT_REQUIRED/)
 })

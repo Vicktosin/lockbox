@@ -1,53 +1,60 @@
-# Windows local-first feasibility proof
+# Lockbox for Windows - local-first preview
 
-Fictional data only. This is an isolated experiment, not a migration or a release for real passwords. Existing React, Fastify, SQLite files and account records are not read by the desktop application.
+> Current Google integration status: [live qualification and security gates](../../docs/google-drive-live-qualification.md). Preview 0.2.1 keeps ordinary-vault cloud uploads blocked; real Google testing uses separate fictional profiles. Earlier evidence below is historical.
 
-The Windows package reuses the React dashboard, credential components, password generator and Phase 3 Argon2id/XChaCha20-Poly1305 vault engine. Electron 45.2.3 supplies an installed application runtime and Windows DPAPI protection. libsodium-wrappers-sumo 0.8.4 supplies Ed25519 signatures and X25519 sealed boxes for explicit Household invitations. Root dependencies and configuration are unchanged. Rust/Tauri tooling was unavailable; this proves the device architecture using Electron, not the final Tauri runtime or mobile runtime.
+The Windows application is the primary product direction. This existing folder retains its historical name to preserve the working proof and encrypted profiles; it is not a second application. See [owner installation instructions](../../WINDOWS.md) and [current implementation/security status](../../docs/windows-local-first-status.md).
 
-## Developer prerequisites before real Google testing
+**Fictional data only. Not a production release. Real Google authorisation, physical two-computer validation, revocation/key rotation and independent review remain outstanding.**
 
-The developer must register a Desktop public OAuth client, enable Drive API v3 and Google Picker, configure the consent audience and provide two disposable Google test accounts. The owner must not configure Cloud Console, credentials, environment variables or terminals. No registration or account consents were available during this proof. Mocked consent is never reported as a real connection.
+## Owner experience
 
-Copy the example to ignored `native-config.json`, supply the registered public client ID and rebuild/package. Do not supply a web client secret or service-account credential. The placeholder is not a usable Google registration. If the configuration is absent, the UI explicitly disables Google connection.
+Extract the supplied package, double-click **LockboxSetup.exe**, choose owner or partner, then open **Lockbox Preview** from the Start menu. Alternatively, open **Lockbox.exe** directly. No terminal, server, Vercel access or environment configuration is needed to create and use an offline encrypted local vault. Setup verifies recovery information before persistence. Do not bypass Windows security warnings; this is an unsigned preview.
 
-The supported system-browser native flow uses PKCE S256, random state, an ephemeral IPv4 loopback callback, offline consent and refresh tokens. Tokens stay in the native process and the OS-protected local file. The temporary callback is not a central application server and ends after consent. The renderer cannot make HTTP requests or call Fastify.
+Normal encrypted profiles remain under AppData/LockboxFeasibilityProof-v1/owner or partner. DPAPI and restrictive ACLs protect the store/tokens, with master-protected root/Personal/Household/device-key envelopes inside. Existing master-bound identity improvements are retained. No legacy database/account migration occurs. Installation copies into a new version directory and creates a role-specific shortcut; it does not delete or overwrite previous versions or vaults.
 
-Default permission: `https://www.googleapis.com/auth/drive.file`. The partner selects the granted proof folders through Google's native Picker. The developer must verify access to newly added children across users with this scope in the live experiment. Do not assume folder membership or a folder ID confers app authorization. A separately configured restricted `drive` scope is accepted only with explicit developer opt-in and new user consent; it is not selected automatically and is not validated by this proof.
+Credential forms, folders, search/categories, generator, reveal/copy, idle lock, master/recovery controls, portable encrypted backup/restore and explicit whole-version conflict handling reuse the original React components and vault engine. Normal local edits remain available while cloud requests are pending. Unuploaded changes are shown separately from the last successful Drive round trip. Native clipboard clearing is conditional and cannot erase OS history.
 
-## Building and diagnostics (developer only)
+## Google registration - developer dependency
 
-From the repository root:
+No registered Desktop OAuth client is supplied to this build. The developer must enable Drive API v3 and Google Picker in their project, register a Desktop public client, configure consent/test users and place the **public client ID** in ignored native-config.json using the tracked example. Rebuild/package afterward. Never include a client secret, service account or refresh token in configuration or frontend environment variables. The owner does not do this work.
+
+Each installation uses its own Google account through the system browser, PKCE S256, random state and a short-lived loopback callback. There is no central token broker or Lockbox backend. Google tokens remain in the native OS-protected store. Default permission is drive.file; unexpected broader scopes are rejected. The old explicit full-Drive proof opt-in is not enabled automatically or approved as a workaround.
+
+Connect remains disabled when developer registration is absent. A real connection is recorded only after successful Google authorisation/account verification. The test transport never constitutes live integration evidence. Restoring a portable backup requires fresh Google authorisation; backup files exclude tokens. Disconnect stops only this installation, not other devices' grants.
+
+## Developer commands
+
+Run from the repository root:
 
 ```powershell
-npm.cmd --prefix proof/windows ci --ignore-scripts
-node proof/windows/node_modules/electron/install.js
 npm.cmd --prefix proof/windows run typecheck
 npm.cmd --prefix proof/windows run build
 npm.cmd --prefix proof/windows run package
-npm.cmd --prefix proof/windows test
+npm.cmd --prefix proof/windows run test:core
+npm.cmd --prefix proof/windows run test:renderer
+npm.cmd --prefix proof/windows run test:packaged
 ```
 
-Packaging writes a new portable `releases/LockboxProof-Windows-<timestamp>` folder with `LockboxProof.exe`, owner/partner launch shortcuts and a SHA-256 inventory. Copy the entire folder when testing on a second Windows computer. It is unsigned and has no installer or update service. It contains no existing database, key file, credentials or OAuth tokens.
+Dependencies are already isolated in this directory: Electron 45.2.3 and libsodium-wrappers-sumo 0.8.4. The package is named lockbox-windows 0.2.1. No dependencies were added/upgraded by this continuation. Root package/build/configuration still describe the preserved legacy web application. The native build writes only releases/native-proof-build; packaging creates a new releases/Lockbox-Windows-Preview-* directory with Lockbox.exe, LockboxSetup.exe, resources and SHA256SUMS.json. Keep all files together. Hashes detect corruption but do not prove publisher authenticity.
 
-Normal profiles are isolated under `%APPDATA%/LockboxFeasibilityProof-v1/owner` or `partner`; Windows filesystem ACLs and DPAPI protect the outer file, with Phase 3 authenticated encryption protecting the vault contents within it. These are separate proof profiles even when launched on the same Windows account. No browser localStorage/IndexedDB keys or account sessions are used. Unavailable OS protection fails closed.
+The stopped-backend-rehearsal.ps1 maintainer script recognises the existing development backend, stops it for packaged tests and restores it in finally. LOCKBOX_PROOF_REQUIRE_BACKEND_STOPPED=1 makes the tests refuse to run if that backend answers. This is not an owner setup step.
 
-Automated packaged tests start two real Electron processes with new protected temporary profiles. An ephemeral Windows named pipe connects them to a **test-only simulated Google transport**, not a production service. The application itself has no permanent listener. Tests use fictional Google identities and fixture credentials exclusively. They stop one executable, restart the other and retain concurrent branches. This is not a substitute for testing two physical machines and real Google accounts. Test mode requires explicit diagnostic flags, a newly named temporary root and a random pipe; it never opens normal profiles. Do not enable it in a release.
+## Live acceptance procedure - still not completed
 
-`LOCKBOX_PROOF_REQUIRE_BACKEND_STOPPED=1` makes packaged tests refuse to run if a service answers the existing development backend port. The maintainer restores that service after the bounded rehearsal. See `docs/native-proof-results.json` for the latest recorded evidence.
+1. Developer supplies the registered client and two disposable Google test accounts, and builds the package. Obtain two physical Windows machines; keep existing data untouched.
+2. Install owner/partner roles independently, create fictional vaults, verify recovery and export private portable backups. Stop Fastify throughout the experiment.
+3. Independently approve Google using each person's own account. Owner creates new LOCKBOX-PROOF folders; existing central folders are not reused or made public.
+4. Partner creates a public pairing request. Compare complete public identity fingerprints through a trusted independent channel. Owner explicitly grants only Household and partner Personal folders and provides the signed, recipient-encrypted invitation. No Personal key or Google password is exchanged.
+5. Partner verifies the owner's fingerprint, accepts the grant, authorises the specific folders through Google, synchronises and imports the Household key into their own master-protected keyring.
+6. Verify private vault decryption boundaries. In particular, test discovery/access to new files added by the other Google account with drive.file, not just already-selected folders. Verify ownership, inherited permissions, token refresh, disconnect/reconnect and errors.
+7. Edit offline, restart, reconnect and compare; edit during a pending request; stop the other computer and repeat. Confirm changes persist locally and eventually upload without losing history.
+8. Make simultaneous Household changes. Decrypt/review both branches, explicitly choose a whole version, synchronise and restore missing entries from retained history. Do not silently choose a winner.
+9. Restore portable files into fresh, empty installations using master and recovery paths. Preserve the source. Recovery cloning is not device revocation: document that release blocker rather than claiming it passed.
 
-## Manual live acceptance once the developer dependency is supplied
+## Security limits
 
-1. Developer prepares two packages with the same registered public client ID and two disposable Google accounts. Keep the existing app and database untouched.
-2. On each Windows machine, open the appropriate shortcut, create a fictional vault and confirm its recovery key. Independently approve Google access using that machine's own test Google account.
-3. Owner creates new `LOCKBOX-PROOF-*` folders and an encrypted test Household Vault. No existing central folder is reused or changed.
-4. Partner supplies the public pairing request. Compare full identity fingerprints through an independent trusted channel. Owner explicitly grants only Household and partner Personal folder access. Partner verifies the owner's fingerprint and accepts the signed, recipient-encrypted invitation.
-5. Partner authorizes the specific proof folders through Google, synchronizes and imports the Household key into their own master-protected keyring. Never exchange Google passwords, Personal keys or recovery keys.
-6. Save fictional Personal and Household credentials; verify each Personal Vault is decryptable only by its owner. The Drive folder owner can see partner ciphertext and metadata, but must fail to decrypt partner Personal contents.
-7. Disconnect networking, edit, restart, reconnect and compare results. Stop the other computer entirely and repeat. Stop Fastify for the entire live workflow. Retain test evidence without credentials or tokens.
-8. Edit the same Household state simultaneously. Both branches must survive and the UI must warn and refuse further destructive writes. Do not silently pick a winner.
+One native identity per installation; separate decentralized username/login accounts, per-device enrollment/revocation and Household key rotation are unfinished. Recovery preserves the old device identity and cannot stop an already-authorised source. Current invitations require manual public request/grant exchange and fingerprint comparison, with no final expiry policy. Signed journals retain at most 256 files per namespace and need production compaction. Conflict resolution chooses a whole version; missing-entry recovery is available, automatic per-field merging is not.
 
-## Explicit limits
+Portable backups use established XChaCha20-Poly1305 and the master/recovery-protected root, but their format/protocol needs independent review. Losing all identity/profile data without an exported portable backup has not been proven recoverable from Drive journals alone. Backups exclude Google tokens and must stay private and off-device. Git/formatting ignores and export-location checks help prevent accidental website/source publication.
 
-One fictional identity and one device key per installation; no final account login layer, device enrollment/revocation, user removal, invitation expiry, key-rotation protocol or migration. No conflict-resolution UI. History is bounded at 256 immutable files per namespace and fails closed at the bound; no production compaction. Automatic sync is attempted after edits with Sync Now for retry; no mobile background execution guarantee. DPAPI protects against offline file theft, not malware running as the signed-in Windows user. Identity fingerprints and encrypted grant exchange are deliberately manual for this proof.
-
-The Drive owner can delete ciphertext or revoke folder access. Signatures, authenticated encryption and retained local history detect tampering/missing known history; they do not prove freshness after total local-state loss or prevent malicious members replaying old material. Approved recipients cannot be made to forget copied data. Google's identity/folder ACLs do not replace cryptographic Household membership. These areas require independent review before migration.
+Drive owners/members can disrupt availability; signatures and retained local history do not guarantee freshness after total state loss. Recipients cannot be made to forget copied data. JavaScript cannot guarantee erasure of all strings/copies, DPAPI cannot defend against malware running as the signed-in OS user, and clipboard history may retain copies. Do not enter real credentials until the live Google, recovery/revocation and security gates are satisfied.

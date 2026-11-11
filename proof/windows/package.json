@@ -1,17 +1,20 @@
 {
-  "name": "lockbox-windows-feasibility",
-  "version": "0.1.0",
+  "name": "lockbox-windows",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "main": "../../releases/native-proof-build/main/main.mjs",
   "scripts": {
     "build": "node scripts/build.mjs",
     "package": "node scripts/package.mjs",
-    "test": "node --experimental-strip-types --test --test-concurrency=1 tests/core.mjs tests/oauth.mjs tests/native.mjs",
-    "test:core": "node --experimental-strip-types --test --test-concurrency=1 tests/core.mjs tests/oauth.mjs",
+    "test": "node --experimental-strip-types --test --test-concurrency=1 tests/desktop.mjs tests/core.mjs tests/oauth.mjs tests/google-integration.mjs tests/renderer.mjs tests/native.mjs",
+    "test:core": "node --experimental-strip-types --test --test-concurrency=1 tests/desktop.mjs tests/core.mjs tests/oauth.mjs tests/google-integration.mjs",
     "test:packaged": "node --experimental-strip-types --test tests/native.mjs",
     "start": "electron .",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:desktop": "node --experimental-strip-types --test tests/desktop.mjs",
+    "test:renderer": "node --experimental-strip-types --test tests/renderer.mjs",
+    "test:google": "node --experimental-strip-types --test tests/google-integration.mjs"
   },
   "dependencies": {
     "libsodium-wrappers-sumo": "0.8.4"

@@ -1,4 +1,5 @@
 import { check } from './errors.mjs'
+import { validPublic, verify } from './identity.mjs'
 const keys = (value, expected) =>
   check(
     value &&
@@ -68,4 +69,54 @@ export function contents(value, scope, owner, id) {
     profile(value.profile.data)
   }
   return value
+}
+/** Defense in depth at the actual network boundary: only signed ciphertext snapshots. */
+export function encryptedTransfer(packet) {
+  keys(packet, ['body', 'signature'])
+  const body = packet.body
+  keys(body, [
+    'v',
+    'kind',
+    'scope',
+    'vaultId',
+    'author',
+    'parents',
+    'nonce',
+    'control',
+    'snapshot',
+  ])
+  check(
+    body.v === 1 &&
+      body.kind === 'lockbox-proof-commit' &&
+      ['personal', 'household'].includes(body.scope),
+    'PROOF_ENCRYPTED_TRANSFER_REQUIRED',
+  )
+  validPublic(body.author)
+  check(
+    /^[a-f0-9-]{36}$/.test(body.nonce) &&
+      Array.isArray(body.parents) &&
+      body.parents.length <= 32 &&
+      body.parents.every((id) => /^[a-f0-9]{64}$/.test(id)),
+    'PROOF_COMMIT_INVALID',
+  )
+  check(
+    body.scope === 'personal'
+      ? body.control === null
+      : /^[a-f0-9]{64}$/.test(body.control),
+    'PROOF_COMMIT_INVALID',
+  )
+  contents(
+    body.snapshot,
+    body.scope,
+    body.snapshot?.vault?.ownerId,
+    body.vaultId,
+  )
+  check(
+    body.scope !== 'personal' ||
+      (body.vaultId === 'personal:' + body.author.accountId &&
+        body.snapshot.vault.ownerId === body.author.accountId),
+    'PROOF_PERSONAL_ACCESS_DENIED',
+  )
+  verify(packet, body.author.signPublic)
+  return packet
 }

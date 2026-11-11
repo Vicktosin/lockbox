@@ -10,11 +10,22 @@ import {
 } from 'node:crypto'
 import { readFileSync, rmSync } from 'node:fs'
 import { VaultEngine } from '../../../src/features/vault/engine.ts'
-import { open, toBase64 } from '../../../src/features/vault/crypto.ts'
+import {
+  open,
+  toBase64,
+  unlockProfile,
+  destroyKeys,
+  randomKey,
+} from '../../../src/features/vault/crypto.ts'
 import { PrivateStore } from '../native/store.mjs'
 import { Replica } from '../native/replica.mjs'
 import { NativeDrive } from '../native/drive.mjs'
-import { hash, publicIdentity, clone } from '../native/identity.mjs'
+import {
+  hash,
+  publicIdentity,
+  clone,
+  newIdentity,
+} from '../native/identity.mjs'
 import { FictionalGoogle } from './google-fixture.mjs'
 const parent = resolve(
     dirname(fileURLToPath(import.meta.url)),
@@ -53,8 +64,18 @@ const drive = (person) =>
   )
 const a = new Replica(storeA, 'owner', () => drive('owner'))
 let b = new Replica(storeB, 'partner', () => drive('partner'))
-const apiA = async (path, body) => a.api(path, body),
-  apiB = async (path, body) => b.api(path, body),
+const apiA = async (path, body) =>
+    a.api(
+      path,
+      body,
+      path === 'setup' ? toBase64(preparedA.keys.root) : undefined,
+    ),
+  apiB = async (path, body) =>
+    b.api(
+      path,
+      body,
+      path === 'setup' ? toBase64(preparedB.keys.root) : undefined,
+    ),
   masterA = 'Fictional owner master passphrase 123!',
   masterB = 'Fictional partner master passphrase 456!'
 let ea, eb, preparedA, preparedB, grant
@@ -70,6 +91,8 @@ const draft = (name, vault = 'personal') => ({
 })
 try {
   await test('two local encrypted profiles reuse existing Argon2id, recovery confirmation and independent personal keys without an account service', async () => {
+    assert.equal(a.status().identityUnlocked, false)
+    assert.throws(() => a.importGrant(null, ''), /PROOF_VAULT_LOCKED/)
     preparedA = await VaultEngine.prepare(a.id, masterA, masterA)
     preparedB = await VaultEngine.prepare(b.id, masterB, masterB)
     await assert.rejects(() =>
@@ -103,6 +126,82 @@ try {
     await assert.rejects(() =>
       VaultEngine.unlock(apiA, a.id, 'Fictional wrong master passphrase!'),
     )
+  })
+  await test('device keys are root-wrapped atomically at setup; lock, wrong roots and tampering fail closed', async () => {
+    const before = clone(a.data)
+    assert.equal('signPrivate' in a.data.identity, false)
+    assert.equal('boxPrivate' in a.data.identity, false)
+    assert.ok(a.data.identityEnvelope)
+    const privateIdentity = clone(a.requireIdentity())
+    a.lockIdentity()
+    assert.throws(() => a.requireIdentity(), /PROOF_VAULT_LOCKED/)
+    assert.throws(() => a.unlockIdentity(toBase64(randomKey())))
+    assert.deepEqual(a.data, before)
+    assert.throws(() => a.requireIdentity(), /PROOF_VAULT_LOCKED/)
+    a.unlockIdentity(toBase64(preparedA.keys.root))
+    assert.deepEqual(a.requireIdentity(), privateIdentity)
+    a.data.identityEnvelope.ciphertext =
+      a.data.identityEnvelope.ciphertext.replace(/^./, (c) =>
+        c === 'A' ? 'B' : 'A',
+      )
+    assert.throws(() => a.unlockIdentity(toBase64(preparedA.keys.root)))
+    assert.throws(() => a.requireIdentity(), /PROOF_VAULT_LOCKED/)
+    a.data = before
+    a.unlockIdentity(toBase64(preparedA.keys.root))
+  })
+  await test('previous fictional profiles upgrade only after root verification and preserve their identity and ciphertext', async () => {
+    const legacy = clone(a.data),
+      identity = newIdentity()
+    legacy.identity = identity
+    delete legacy.identityEnvelope
+    let saved = clone(legacy)
+    const store = {
+      load: () => clone(saved),
+      save: (value) => {
+        saved = clone(value)
+      },
+    }
+    const replica = new Replica(store, 'owner', () => drive('owner'))
+    // Rebind a disposable legacy fixture to its own account ID/keyring context.
+    const prepared = await VaultEngine.prepare(
+      identity.accountId,
+      masterA,
+      masterA,
+    )
+    replica.data.state.profile.data = prepared.profile
+    replica.save()
+    const payload = clone(replica.data.state.personal.payload)
+    assert.throws(() => replica.unlockIdentity(toBase64(randomKey())))
+    assert.deepEqual(saved.identity, identity)
+    const save = store.save
+    store.save = () => {
+      throw new Error('Fictional disk failure')
+    }
+    assert.throws(
+      () => replica.unlockIdentity(toBase64(prepared.keys.root)),
+      /Fictional disk failure/,
+    )
+    assert.deepEqual(replica.data.identity, identity)
+    assert.equal(replica.data.identityEnvelope, undefined)
+    assert.throws(() => replica.requireIdentity(), /PROOF_VAULT_LOCKED/)
+    store.save = save
+    replica.unlockIdentity(toBase64(prepared.keys.root))
+    assert.deepEqual(replica.requireIdentity(), identity)
+    assert.deepEqual(saved.identity, publicIdentity(identity))
+    assert.deepEqual(saved.state.personal.payload, payload)
+    const restarted = new Replica(store, 'owner', () => drive('owner'))
+    assert.throws(() => restarted.requireIdentity(), /PROOF_VAULT_LOCKED/)
+    restarted.unlockIdentity(toBase64(prepared.keys.root))
+    assert.deepEqual(restarted.requireIdentity(), identity)
+    restarted.identityDeadline = performance.now() - 1
+    assert.equal(restarted.touchIdentity(), false)
+    assert.throws(() => restarted.requireIdentity(), /PROOF_VAULT_LOCKED/)
+    restarted.identityIdleMs = 20
+    restarted.unlockIdentity(toBase64(prepared.keys.root))
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    assert.throws(() => restarted.requireIdentity(), /PROOF_VAULT_LOCKED/)
+    assert.equal(restarted.touchIdentity(), false)
+    destroyKeys(prepared.keys)
   })
   await test('owner uses newly created private fictional folders; Household grant requires another Google principal and verified fingerprint', async () => {
     a.account(google.users.owner)
@@ -138,6 +237,9 @@ try {
     ])
     await b.sync()
     await eb.refresh()
+    b.lockIdentity()
+    assert.throws(() => b.householdCode(), /PROOF_VAULT_LOCKED/)
+    b.unlockIdentity(toBase64(preparedB.keys.root))
     await eb.joinHousehold(b.householdCode())
     await b.sync()
     assert.equal(eb.household.joined, true)
@@ -202,6 +304,13 @@ try {
       'partner',
       () => drive('partner'),
     )
+    assert.throws(() => b.pairing(), /PROOF_VAULT_LOCKED/)
+    const keys = await unlockProfile(b.id, b.state().profile.data, masterB)
+    try {
+      b.unlockIdentity(toBase64(keys.root))
+    } finally {
+      destroyKeys(keys)
+    }
     eb = await VaultEngine.unlock(apiB, b.id, masterB)
     assert.ok(eb.credentials.some((c) => c.name === 'Fictional offline-shared'))
     const previous = a.getDrive
@@ -239,6 +348,76 @@ try {
     forged.body.scope = 'personal'
     assert.throws(() => b.validateCommit(forged, 'personal'), /PERSONAL/)
   })
+  await test(
+    'local edits during a stalled Drive request remain usable, retained and subsequently upload without overwriting history',
+    { timeout: 45000 },
+    async () => {
+      await a.sync()
+      await ea.refresh()
+      const original = a.getDrive,
+        provider = drive('owner'),
+        list = provider.list.bind(provider)
+      let release,
+        entered,
+        paused = false
+      const gate = new Promise((resolve) => {
+          release = resolve
+        }),
+        waiting = new Promise((resolve) => {
+          entered = resolve
+        })
+      provider.list = async (folder) => {
+        if (!paused) {
+          paused = true
+          entered()
+          await gate
+        }
+        return list(folder)
+      }
+      a.getDrive = () => provider
+      const syncing = a.sync()
+      try {
+        await waiting
+        await ea.saveCredential(draft('during-stalled-sync'))
+        assert.ok(
+          ea.credentials.some(
+            (c) => c.name === 'Fictional during-stalled-sync',
+          ),
+        )
+        release()
+        await syncing
+        assert.ok(a.status().pendingChanges > 0)
+        await a.sync()
+        await ea.refresh()
+        assert.equal(a.status().pendingChanges, 0)
+        const known = [...google.files.values()].find(
+          (f) =>
+            f.packet?.body.scope === 'personal' &&
+            f.packet.body.author.accountId === a.id,
+        )
+        const knownHash = hash(known.packet)
+        delete a.data.uploads[knownHash] // A restored checkpoint may not know this already-published commit.
+        await a.sync()
+        assert.equal(a.data.uploads[knownHash].done, true)
+        google.files.delete(known.id)
+        try {
+          await assert.rejects(() => a.sync(), /CLOUD_HISTORY_MISSING/)
+        } finally {
+          google.files.set(known.id, known)
+        }
+
+        assert.ok(
+          ea.credentials.some(
+            (c) => c.name === 'Fictional during-stalled-sync',
+          ),
+        )
+      } finally {
+        release()
+        await syncing.catch(() => {})
+        a.getDrive = original
+      }
+    },
+  )
   await test('simultaneous Household edits retain both signed branches and visibly block destructive overwrites', async () => {
     await a.sync()
     await b.sync()
@@ -260,6 +439,46 @@ try {
     await assert.rejects(
       () => ea.saveCredential(draft('must-not-overwrite', 'shared')),
       /REVISION/,
+    )
+  })
+  await test('explicit Household conflict resolution converges across independent installations and retained losing entries can be recovered', async () => {
+    const versions = a.conflictVersions('household'),
+      heads = versions.map((v) => v.id),
+      chosen = versions.find((v) => v.author.accountId === a.id),
+      other = versions.find((v) => v.id !== chosen.id)
+    assert.throws(
+      () => a.resolveConflict('household', chosen.id, [chosen.id]),
+      /CONFLICT_CHANGED/,
+    )
+    const retained = a.data.journal.household.map(hash)
+    a.resolveConflict('household', chosen.id, heads)
+    assert.ok(
+      retained.every((id) =>
+        a.data.journal.household.some((p) => hash(p) === id),
+      ),
+    )
+    await a.sync()
+    await b.sync()
+    await ea.refresh()
+    await eb.refresh()
+    assert.equal(a.status().conflicts.household.length, 0)
+    assert.equal(b.status().conflicts.household.length, 0)
+    assert.ok(
+      ea.credentials.some((c) => c.name === 'Fictional concurrent-owner'),
+    )
+    assert.equal(
+      eb.credentials.some((c) => c.name === 'Fictional concurrent-partner'),
+      false,
+    )
+    await ea.restoreRevision(other.snapshot.vault)
+    await a.sync()
+    await b.sync()
+    await eb.refresh()
+    assert.ok(
+      eb.credentials.some((c) => c.name === 'Fictional concurrent-owner'),
+    )
+    assert.ok(
+      eb.credentials.some((c) => c.name === 'Fictional concurrent-partner'),
     )
   })
   await test('recovery and master change preserve personal ciphertext; local persistence contains no plaintext credential or private key material', async () => {
@@ -292,14 +511,21 @@ try {
       recovery.recoveryCode,
     )
     assert.deepEqual(a.state().personal.payload, personal)
+    a.lockIdentity()
+    const keys = await unlockProfile(a.id, a.state().profile.data, masterA)
+    try {
+      a.unlockIdentity(toBase64(keys.root))
+    } finally {
+      destroyKeys(keys)
+    }
     for (const store of [storeA, storeB]) {
       const bytes = readFileSync(store.file).toString('utf8')
       for (const value of [
         'Fictional-saved-secret',
         masterA,
         masterB,
-        a.data.identity.signPrivate,
-        b.data.identity.boxPrivate,
+        a.requireIdentity().signPrivate,
+        b.requireIdentity().boxPrivate,
       ])
         assert.equal(bytes.includes(value), false)
     }
@@ -307,6 +533,8 @@ try {
 } finally {
   ea?.lock()
   eb?.lock()
+  a.lockIdentity()
+  b.lockIdentity()
   if (resolve(root).startsWith(resolve(parent) + sep))
     rmSync(root, { recursive: true, force: true })
 }

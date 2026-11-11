@@ -14,12 +14,13 @@ import { createHash } from 'node:crypto'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..'),
   proof = join(root, 'proof/windows'),
   built = join(root, 'releases/native-proof-build'),
-  output = join(root, 'releases', 'LockboxProof-Windows-' + Date.now())
+  output = join(root, 'releases', 'Lockbox-Windows-Preview-' + Date.now())
 if (!existsSync(join(built, 'main/main.mjs')))
   throw new Error('Build the proof first')
 mkdirSync(output, { recursive: true })
 cpSync(join(proof, 'node_modules/electron/dist'), output, { recursive: true })
-renameSync(join(output, 'electron.exe'), join(output, 'LockboxProof.exe'))
+renameSync(join(output, 'electron.exe'), join(output, 'Lockbox.exe'))
+copyFileSync(join(output, 'Lockbox.exe'), join(output, 'LockboxSetup.exe'))
 const app = join(output, 'resources/app')
 mkdirSync(app, { recursive: true })
 for (const name of ['main', 'renderer', 'node_modules'])
@@ -32,23 +33,15 @@ if (existsSync(join(built, 'public-config.json')))
 writeFileSync(
   join(app, 'package.json'),
   JSON.stringify({
-    name: 'lockbox-fictional-proof',
-    version: '0.1.0',
+    name: 'lockbox-windows-preview',
+    version: '0.2.1',
     type: 'module',
     main: 'main/main.mjs',
   }) + '\n',
 )
 writeFileSync(
-  join(output, 'Open-owner.cmd'),
-  '@echo off\r\nstart "" "%~dp0LockboxProof.exe" --profile=owner --role=owner\r\n',
-)
-writeFileSync(
-  join(output, 'Open-partner.cmd'),
-  '@echo off\r\nstart "" "%~dp0LockboxProof.exe" --profile=partner --role=partner\r\n',
-)
-writeFileSync(
   join(output, 'README.txt'),
-  'FICTIONAL DATA ONLY. Unsigned feasibility package, not a production release.\r\nLaunch LockboxProof.exe (owner), or Open-partner.cmd for the independent partner profile.\r\nGoogle registration must be configured by the developer before real consent is possible. No client secret belongs in this package.\r\nLocal proof data is isolated in AppData/LockboxFeasibilityProof-v1. No legacy database is read.\r\n',
+  'LOCKBOX FOR WINDOWS - PREVIEW. FICTIONAL DATA ONLY. Not a production release.\r\nTo install: double-click LockboxSetup.exe and choose owner or partner. Open Lockbox Preview from the Windows Start menu afterward. No terminal is required.\r\nGoogle tests use the separate Lockbox Google Drive test Start menu shortcut. Ordinary vault uploads are blocked until security requirements pass. Test profiles never import existing vaults.\r\nTo run without installation: open Lockbox.exe; select the appropriate household role before vault setup.\r\nGoogle registration must be supplied by the developer before real consent is possible. No client secret belongs in this package.\r\nExisting Windows profiles remain in AppData/LockboxFeasibilityProof-v1. No legacy database is read.\r\nThe package is unsigned. Checksums detect corruption, not publisher identity. Do not bypass Windows security warnings.\r\n',
 )
 const hashes = {}
 function scan(dir) {

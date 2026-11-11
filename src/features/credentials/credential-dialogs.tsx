@@ -245,7 +245,7 @@ export function CredentialForm({
       title={credential ? 'Edit credential' : 'Add a credential'}
       description={
         persisted
-          ? 'Encrypted locally before saving to the backend. Independent security review is still pending.'
+          ? 'Encrypted on your device before saving. Independent security review is still pending.'
           : 'Demo only. Do not enter real passwords or sensitive notes.'
       }
       onClose={onClose}

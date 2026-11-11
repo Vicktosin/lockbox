@@ -2,13 +2,19 @@
   "runtime": "packaged Electron",
   "externalGoogle": "NOT RUN",
   "simulatedTransport": true,
-  "backendStopped": true,
+  "backendStopped": false,
   "twoIndependentProcesses": true,
   "peerStopped": true,
   "household": true,
   "conflict": true,
   "osProtection": true,
   "rendererBoot": true,
+  "singleProfileInstance": true,
+  "portableRestore": true,
+  "writesDuringSync": true,
+  "conflictResolution": true,
+  "physicalTwoComputerTest": false,
+  "googleTestProfileBoot": true,
   "completeLiveProofPassed": false,
-  "time": "2026-11-10T19:30:24.025Z"
+  "time": "2026-11-11T14:07:55.925Z"
 }

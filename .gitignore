@@ -37,3 +37,7 @@ server/.data/
 *.sqlite-wal
 *.sqlite-shm
 *.lbbak
+
+# Private Windows vault files and portable encrypted exports.
+*.lockbox-backup
+fictional-proof.sealed

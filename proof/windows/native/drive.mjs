@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { check, ProofError } from './errors.mjs'
 import { readResponse } from './oauth.mjs'
+import { encryptedTransfer } from './contracts.mjs'
 const base = 'https://www.googleapis.com/drive/v3/'
 const fileId = (value) => {
   check(typeof value === 'string' && /^[A-Za-z0-9_-]{10,150}$/.test(value))
@@ -59,14 +60,39 @@ export class NativeDrive {
         await this.sleep(250 * 2 ** attempt)
         continue
       }
+      let reason = ''
+      if (response.status === 403) {
+        try {
+          const error = (await readResponse(response, 65536)).error
+          reason =
+            error?.errors?.[0]?.reason ??
+            error?.details?.find((detail) => detail.reason)?.reason ??
+            ''
+        } catch {
+          /* Never display Google's raw body or diagnostic message. */
+        }
+        if (['accessNotConfigured', 'SERVICE_DISABLED'].includes(reason))
+          throw new ProofError('PROOF_GOOGLE_DRIVE_API_NOT_ENABLED')
+        if (['rateLimitExceeded', 'userRateLimitExceeded'].includes(reason)) {
+          if (attempt === 3) throw new ProofError('PROOF_GOOGLE_RATE_LIMITED')
+          await this.sleep(250 * 2 ** attempt)
+          continue
+        }
+      }
       const code =
-        response.status === 403
-          ? 'PROOF_GOOGLE_FOLDER_PERMISSION_REQUIRED'
-          : response.status === 404
-            ? 'PROOF_CLOUD_DATA_MISSING'
-            : response.status === 409
-              ? 'PROOF_CLOUD_FILE_EXISTS'
-              : 'PROOF_GOOGLE_REQUEST_FAILED'
+        response.status === 429
+          ? 'PROOF_GOOGLE_RATE_LIMITED'
+          : response.status >= 500
+            ? 'PROOF_GOOGLE_TEMPORARY_ERROR'
+            : response.status === 401
+              ? 'PROOF_GOOGLE_RECONNECT_REQUIRED'
+              : response.status === 403
+                ? 'PROOF_GOOGLE_FOLDER_PERMISSION_REQUIRED'
+                : response.status === 404
+                  ? 'PROOF_CLOUD_DATA_MISSING'
+                  : response.status === 409
+                    ? 'PROOF_CLOUD_FILE_EXISTS'
+                    : 'PROOF_GOOGLE_REQUEST_FAILED'
       await response.body?.cancel()
       throw new ProofError(code)
     }
@@ -136,6 +162,38 @@ export class NativeDrive {
       typeof person.emailAddress === 'string' &&
         person.emailAddress.length < 300,
     )
+    const current = await this.json(
+      'files/' +
+        fileId(folder) +
+        '/permissions?fields=permissions(id,type,role,emailAddress)&pageSize=100',
+    )
+    const existing = current.permissions?.find(
+      (p) =>
+        p.type === 'user' &&
+        (p.id === person.permissionId ||
+          p.emailAddress?.toLowerCase() === person.emailAddress.toLowerCase()),
+    )
+    if (existing && ['writer', 'owner'].includes(existing.role)) return
+    if (existing) {
+      check(
+        typeof existing.id === 'string' &&
+          /^[A-Za-z0-9_-]{1,200}$/.test(existing.id),
+        'PROOF_GOOGLE_IDENTITY_INVALID',
+      )
+      await this.json(
+        'files/' +
+          fileId(folder) +
+          '/permissions/' +
+          existing.id +
+          '?fields=id',
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: 'writer' }),
+        },
+      )
+      return
+    }
     await this.json(
       'files/' +
         fileId(folder) +
@@ -193,11 +251,14 @@ export class NativeDrive {
         meta.appProperties?.lockboxProof === 'v1',
       'PROOF_FILE_OUTSIDE_NAMESPACE',
     )
-    return readResponse(
-      await this.request('files/' + fileId(id) + '?alt=media'),
+    return encryptedTransfer(
+      await readResponse(
+        await this.request('files/' + fileId(id) + '?alt=media'),
+      ),
     )
   }
   async create(id, folder, packet) {
+    encryptedTransfer(packet)
     const boundary = 'lockbox-' + randomBytes(20).toString('hex'),
       metadata = {
         id: fileId(id),

@@ -5,9 +5,20 @@ import { spawn } from 'node:child_process'
 import { join, resolve, dirname, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { randomUUID } from 'node:crypto'
-import { readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+  copyFileSync,
+} from 'node:fs'
 import { createInterface } from 'node:readline'
 import { VaultEngine } from '../../../src/features/vault/engine.ts'
+import {
+  unlockProfile,
+  destroyKeys,
+  toBase64,
+} from '../../../src/features/vault/crypto.ts'
 import { hash } from '../native/identity.mjs'
 import { FictionalGoogle } from './google-fixture.mjs'
 const workspace = resolve(dirname(fileURLToPath(import.meta.url)), '../../..'),
@@ -15,11 +26,11 @@ const workspace = resolve(dirname(fileURLToPath(import.meta.url)), '../../..'),
   root = join(parent, 'lockbox-native-proof-test-' + randomUUID()),
   releases = join(workspace, 'releases')
 const packagePath = readdirSync(releases)
-  .filter((name) => name.startsWith('LockboxProof-Windows-'))
+  .filter((name) => name.startsWith('Lockbox-Windows-Preview-'))
   .sort()
   .at(-1)
 assert.ok(packagePath, 'Build and package the isolated Windows proof first')
-const executable = join(releases, packagePath, 'LockboxProof.exe'),
+const executable = join(releases, packagePath, 'Lockbox.exe'),
   google = new FictionalGoogle(),
   evidence = {
     runtime: 'packaged Electron',
@@ -32,6 +43,12 @@ const executable = join(releases, packagePath, 'LockboxProof.exe'),
     conflict: false,
     osProtection: false,
     rendererBoot: false,
+    singleProfileInstance: false,
+    portableRestore: false,
+    writesDuringSync: false,
+    conflictResolution: false,
+    physicalTwoComputerTest: false,
+    googleTestProfileBoot: false,
   }
 if (process.env.LOCKBOX_PROOF_REQUIRE_BACKEND_STOPPED === '1') {
   let response = false
@@ -49,6 +66,15 @@ if (process.env.LOCKBOX_PROOF_REQUIRE_BACKEND_STOPPED === '1') {
     'Stop the existing backend through the maintainer-controlled rehearsal first',
   )
   evidence.backendStopped = true
+}
+async function unlockNative(installation, id, password) {
+  const state = await installation.api('state')
+  const keys = await unlockProfile(id, state.profile.data, password)
+  try {
+    await installation.request('unlock-identity', { root: toBase64(keys.root) })
+  } finally {
+    destroyKeys(keys)
+  }
 }
 class Installation {
   constructor(profile, role) {
@@ -142,7 +168,11 @@ class Installation {
     })
   }
   api = (path, body) =>
-    this.request('api', { path, ...(body === undefined ? {} : { body }) })
+    this.request('api', {
+      path,
+      ...(body === undefined ? {} : { body }),
+      ...(path === 'setup' ? { setupRoot: this.setupRoot } : {}),
+    })
   async close() {
     if (this.child.exitCode !== null) return
     await this.request('close')
@@ -176,10 +206,20 @@ try {
     evidence.osProtection = true
     const sa = await a.request('status'),
       sb = await b.request('status')
+    assert.equal(sa.identityUnlocked, false)
+    assert.equal(sb.identityUnlocked, false)
+    await assert.rejects(
+      () => b.request('import-grant', { packet: null, fingerprint: '' }),
+      /PROOF_VAULT_LOCKED/,
+    )
     const pa = await VaultEngine.prepare(sa.accountId, masterA, masterA),
       pb = await VaultEngine.prepare(sb.accountId, masterB, masterB)
+    a.setupRoot = toBase64(pa.keys.root)
+    b.setupRoot = toBase64(pb.keys.root)
     ea = await VaultEngine.finishSetup(a.api, sa.accountId, pa, pa.recoveryCode)
     eb = await VaultEngine.finishSetup(b.api, sb.accountId, pb, pb.recoveryCode)
+    a.setupRoot = undefined
+    b.setupRoot = undefined
     await ea.saveCredential(credential('native-owner-personal', 'personal'))
     await eb.saveCredential(credential('native-partner-personal', 'personal'))
     for (const profile of ['owner', 'partner']) {
@@ -189,6 +229,54 @@ try {
       for (const value of [masterA, masterB, 'Fictional-native-process-secret'])
         assert.equal(bytes.includes(value), false)
     }
+  })
+  await test('a second process cannot open and overwrite an already running local profile', async () => {
+    const before = await a.api('state'),
+      env = { ...process.env }
+    delete env.ELECTRON_RUN_AS_NODE
+    delete env.NODE_OPTIONS
+    const duplicate = spawn(
+      executable,
+      [
+        '--diagnostic',
+        '--profile=owner',
+        '--role=owner',
+        '--test-root=' + root,
+        '--test-pipe=lockbox-proof-' + randomUUID(),
+      ],
+      { cwd: workspace, env, windowsHide: true, stdio: 'ignore' },
+    )
+    const code = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        duplicate.kill()
+        reject(new Error('Duplicate profile process did not stop'))
+      }, 15000)
+      duplicate.once('error', reject)
+      duplicate.once('exit', (code) => {
+        clearTimeout(timer)
+        resolve(code)
+      })
+    })
+    assert.equal(code, 0)
+    assert.deepEqual(await a.api('state'), before)
+    evidence.singleProfileInstance = true
+  })
+  await test('packaged IPC rejects signing and writes while locked and requires a verified root to resume', async () => {
+    const status = await a.request('status')
+    await a.request('lock-identity')
+    await assert.rejects(
+      () => a.request('api', { path: 'personal', body: {} }),
+      /PROOF_VAULT_LOCKED/,
+    )
+    await assert.rejects(() =>
+      a.request('unlock-identity', { root: toBase64(new Uint8Array(32)) }),
+    )
+    await assert.rejects(
+      () => a.request('api', { path: 'personal', body: {} }),
+      /PROOF_VAULT_LOCKED/,
+    )
+    await unlockNative(a, status.accountId, masterA)
+    await ea.saveCredential(credential('after-native-reunlock', 'personal'))
   })
   await test('packaged processes independently share only authorized ciphertext through the simulated Google transport', async () => {
     await a.request('diagnostic-account', google.users.owner)
@@ -228,6 +316,106 @@ try {
     )
     evidence.household = true
   })
+  await test(
+    'packaged local writes remain available during a stalled cloud request and upload on retry',
+    { timeout: 45000 },
+    async () => {
+      const original = google.fetch.bind(google)
+      let release,
+        entered,
+        paused = false
+      const gate = new Promise((resolve) => {
+          release = resolve
+        }),
+        waiting = new Promise((resolve) => {
+          entered = resolve
+        })
+      google.fetch = async (url, options) => {
+        if (!paused && new URL(url).searchParams.has('q')) {
+          paused = true
+          entered()
+          await gate
+        }
+        return original(url, options)
+      }
+      const syncing = a.request('sync')
+      try {
+        await waiting
+        await ea.saveCredential(credential('native-during-sync', 'personal'))
+        release()
+        await syncing
+        assert.ok((await a.request('status')).pendingChanges > 0)
+        await a.request('sync')
+        await ea.refresh()
+        assert.equal((await a.request('status')).pendingChanges, 0)
+        assert.ok(
+          ea.credentials.some((c) => c.name === 'Fictional native-during-sync'),
+        )
+        evidence.writesDuringSync = true
+      } finally {
+        release()
+        await syncing.catch(() => {})
+        google.fetch = original
+      }
+    },
+  )
+  await test('portable encrypted files restore into a fresh OS-protected packaged profile without replacing its source', async () => {
+    const status = await a.request('status'),
+      state = await a.api('state'),
+      keys = await unlockProfile(status.accountId, state.profile.data, masterA)
+    let recoveredInstallation, recoveredEngine
+    try {
+      const sourceFile = join(root, 'owner', 'portable.lockbox-backup')
+      await a.request('backup-export', {
+        root: toBase64(keys.root),
+        file: sourceFile,
+      })
+      const contents = readFileSync(sourceFile, 'utf8')
+      assert.equal(contents.includes('Fictional-native-process-secret'), false)
+      assert.equal(contents.includes(masterA), false)
+      recoveredInstallation = new Installation('restored-owner', 'owner')
+      await recoveredInstallation.ready
+      const destination = join(
+        root,
+        'restored-owner',
+        'portable.lockbox-backup',
+      )
+      copyFileSync(sourceFile, destination)
+      const header = await recoveredInstallation.request('backup-inspect', {
+        file: destination,
+      })
+      assert.equal(header.accountId, status.accountId)
+      await recoveredInstallation.request('backup-restore', {
+        root: toBase64(keys.root),
+      })
+      await unlockNative(recoveredInstallation, status.accountId, masterA)
+      recoveredEngine = await VaultEngine.unlock(
+        recoveredInstallation.api,
+        status.accountId,
+        masterA,
+      )
+      assert.ok(
+        recoveredEngine.credentials.some(
+          (c) => c.name === 'Fictional native-owner-personal',
+        ),
+      )
+      assert.ok(
+        recoveredEngine.credentials.some(
+          (c) => c.name === 'Fictional native-household',
+        ),
+      )
+      assert.deepEqual(await a.api('state'), state)
+      assert.equal(
+        (await recoveredInstallation.request('status')).identityUnlocked,
+        true,
+      )
+      evidence.portableRestore = true
+    } finally {
+      destroyKeys(keys)
+      recoveredEngine?.lock()
+      if (recoveredInstallation) await recoveredInstallation.close()
+    }
+  })
   await test('one packaged installation synchronizes and survives offline restart with the other installation actually stopped', async () => {
     await a.close()
     evidence.peerStopped = true
@@ -239,6 +427,8 @@ try {
     b = new Installation('partner', 'partner')
     await b.ready
     const status = await b.request('status')
+    await assert.rejects(() => b.request('pairing'), /PROOF_VAULT_LOCKED/)
+    await unlockNative(b, status.accountId, masterB)
     eb = await VaultEngine.unlock(b.api, status.accountId, masterB)
     assert.ok(eb.credentials.some((c) => c.name === 'Fictional native-offline'))
     google.offline.delete('partner')
@@ -246,6 +436,7 @@ try {
     a = new Installation('owner', 'owner')
     await a.ready
     const sa = await a.request('status')
+    await unlockNative(a, sa.accountId, masterA)
     ea = await VaultEngine.unlock(a.api, sa.accountId, masterA)
     await a.request('sync')
     await ea.refresh()
@@ -268,6 +459,36 @@ try {
       /REVISION/,
     )
     evidence.conflict = true
+  })
+  await test('packaged conflict resolution keeps both encrypted branches and converges without a backend', async () => {
+    const versions = await a.request('conflicts', { scope: 'household' }),
+      status = await a.request('status')
+    const chosen =
+      versions.find((v) => v.author.accountId === status.accountId) ??
+      versions[0]
+    await assert.rejects(
+      () =>
+        a.request('resolve-conflict', {
+          scope: 'household',
+          selected: chosen.id,
+          expectedHeads: [],
+        }),
+      /CONFLICT_CHANGED/,
+    )
+    await a.request('resolve-conflict', {
+      scope: 'household',
+      selected: chosen.id,
+      expectedHeads: versions.map((v) => v.id),
+    })
+    await a.request('sync')
+    await b.request('sync')
+    await ea.refresh()
+    await eb.refresh()
+    assert.equal((await a.request('status')).conflicts.household.length, 0)
+    assert.equal((await b.request('status')).conflicts.household.length, 0)
+    const retained = await a.request('history', { scope: 'household' })
+    assert.ok(versions.every((v) => retained.some((old) => old.id === v.id)))
+    evidence.conflictResolution = true
   })
   await test('packaged sandboxed React renderer boots from bundled assets without an HTTP frontend or backend', async () => {
     const env = { ...process.env }
@@ -305,6 +526,44 @@ try {
       true,
     )
     evidence.rendererBoot = true
+  })
+  await test('isolated Google-test renderer boots in a separate mode and reports no real Google registration', async () => {
+    const env = { ...process.env }
+    delete env.ELECTRON_RUN_AS_NODE
+    delete env.NODE_OPTIONS
+    const child = spawn(
+      executable,
+      [
+        '--render-check',
+        '--google-test',
+        '--profile=google-renderer-check',
+        '--role=owner',
+        '--test-root=' + root,
+      ],
+      { cwd: workspace, env, windowsHide: true, stdio: 'ignore' },
+    )
+    const code = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        child.kill()
+        reject(new Error('Google test renderer did not boot'))
+      }, 45000)
+      child.once('error', reject)
+      child.once('exit', (code) => {
+        clearTimeout(timer)
+        resolve(code)
+      })
+    })
+    assert.equal(code, 0)
+    const marker = JSON.parse(
+      readFileSync(
+        join(root, 'google-renderer-check', 'renderer-ready.json'),
+        'utf8',
+      ),
+    )
+    assert.equal(marker.googleTestMode, true)
+    assert.equal(marker.googleConfigured, false)
+    assert.equal(marker.liveSyncAllowed, false)
+    evidence.googleTestProfileBoot = true
   })
 } finally {
   ea?.lock()
