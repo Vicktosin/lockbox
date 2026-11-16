@@ -8,7 +8,12 @@ const nextConfig: NextConfig = {
         source: '/:path*',
         headers: [
           { key: 'X-Content-Type-Options', value: 'nosniff' },
-          { key: 'Referrer-Policy', value: 'no-referrer' },
+          // Google Identity Services expects the page origin in the Referer
+          // header; this sends only the origin cross-site, never the path.
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin',
+          },
           { key: 'X-Frame-Options', value: 'DENY' },
           {
             key: 'Cross-Origin-Opener-Policy',

@@ -128,7 +128,13 @@ function requestGoogleToken(clientId: string) {
             !Number.isFinite(expiresIn) ||
             expiresIn <= 0
           ) {
-            reject(new Error('Google access was not approved.'))
+            reject(
+              new Error(
+                response.error === 'access_denied'
+                  ? 'Google access was not approved (access_denied). Choose Allow on the Google consent screen.'
+                  : `Google sign-in failed (${response.error ?? 'no_access_token'}${response.error_description ? ': ' + response.error_description : ''}).`,
+              ),
+            )
             return
           }
           const granted = new Set(
@@ -137,10 +143,13 @@ function requestGoogleToken(clientId: string) {
               .filter(Boolean)
               .map(normalizeScope),
           )
-          if (!requestedScopes.every((scope) => granted.has(scope))) {
+          const missing = requestedScopes.filter((scope) => !granted.has(scope))
+          if (missing.length) {
             reject(
               new Error(
-                'Google returned permissions that do not match this app.',
+                missing.some((scope) => scope.includes('/auth/drive'))
+                  ? 'Google Drive access was not granted. Sign in again and tick both Google Drive checkboxes on the consent screen ("See, edit, create and delete only the specific Google Drive files you use with this app" and "See, create and delete its own configuration data in your Google Drive").'
+                  : `Google did not grant: ${missing.join(', ')}. Sign in again and allow all requested access.`,
               ),
             )
             return
@@ -157,8 +166,8 @@ function requestGoogleToken(clientId: string) {
             error.type === 'popup_failed_to_open'
               ? 'The Google sign-in popup was blocked. Allow pop-ups for this site and try again.'
               : error.type === 'popup_closed'
-                ? 'The Google sign-in popup closed before authorization completed. Keep it open until Google returns to Lockbox.'
-                : 'Google sign-in could not complete. Allow pop-ups for this site and try again.'
+                ? 'The Google sign-in popup closed before Google returned access (popup_closed). If the popup showed a Google error such as "Access blocked" or "Error 403: access_denied", that message is the cause: fix it in Google Cloud Console (OAuth consent screen / test users).'
+                : `Google sign-in could not complete (${error.type ?? 'unknown'}).`
           reject(new Error(message))
         },
       })

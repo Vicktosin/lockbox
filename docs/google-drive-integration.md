@@ -21,6 +21,13 @@ consent screen and exact website origins in Google Cloud. The web deployment
 sets `Cross-Origin-Opener-Policy: same-origin-allow-popups` so Google Identity
 Services can communicate with its OAuth popup.
 
+Google matches JavaScript origins exactly. For local development, register
+`http://localhost:3000` as an authorized JavaScript origin and open the app at
+that address (`npm run dev` binds to it). `http://127.0.0.1:3000` is a different
+origin; Google rejects it with `origin_mismatch`, which surfaces in Lockbox as a
+failed or closed sign-in popup. The app redirects loopback-IP visits to
+`localhost` for this reason.
+
 The app requests only `openid`, `email`,
 `https://www.googleapis.com/auth/drive.file`, and
 `https://www.googleapis.com/auth/drive.appdata`. Google Identity Services

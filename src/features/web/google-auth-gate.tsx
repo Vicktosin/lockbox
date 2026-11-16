@@ -22,6 +22,16 @@ export function GoogleAuthGate() {
   const [configLoading, setConfigLoading] = useState(true)
 
   useEffect(() => {
+    // Google OAuth origins are exact: http://localhost:3000 is authorized,
+    // http://127.0.0.1:3000 is not. Move loopback-IP visits to localhost so
+    // the sign-in popup is not rejected with origin_mismatch.
+    const { hostname, protocol, port, pathname, search, hash } = window.location
+    if (hostname === '127.0.0.1' || hostname === '[::1]') {
+      window.location.replace(
+        `${protocol}//localhost${port ? ':' + port : ''}${pathname}${search}${hash}`,
+      )
+      return
+    }
     let active = true
     void prepareGoogleSignIn()
       .then((value) => {
