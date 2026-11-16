@@ -17,16 +17,28 @@ Set these public browser configuration values in the Next.js deployment:
 The same values may be placed in `.env.local` during local development. Do not
 add a client secret or service-account key: this application uses Google's
 browser OAuth token flow. Enable the Google Drive API and configure the OAuth
-consent screen and exact website origins in Google Cloud. The web deployment
-sets `Cross-Origin-Opener-Policy: same-origin-allow-popups` so Google Identity
-Services can communicate with its OAuth popup.
+consent screen in Google Cloud.
 
-Google matches JavaScript origins exactly. For local development, register
-`http://localhost:3000` as an authorized JavaScript origin and open the app at
-that address (`npm run dev` binds to it). `http://127.0.0.1:3000` is a different
-origin; Google rejects it with `origin_mismatch`, which surfaces in Lockbox as a
-failed or closed sign-in popup. The app redirects loopback-IP visits to
-`localhost` for this reason.
+Sign-in is a full-page OAuth 2.0 redirect (`response_type=token`), not a popup,
+so it does not depend on pop-up blockers, `window.opener` or
+Cross-Origin-Opener-Policy. In the OAuth client, register each site address
+**with a trailing slash** under **Authorized redirect URIs**, and without one
+under **Authorized JavaScript origins**:
+
+| Environment | Authorized redirect URI           | Authorized JavaScript origin     |
+| ----------- | --------------------------------- | -------------------------------- |
+| Production  | `https://lockbox-jet.vercel.app/` | `https://lockbox-jet.vercel.app` |
+| Local       | `http://localhost:3000/`          | `http://localhost:3000`          |
+
+Google matches these exactly. A missing redirect URI shows Google's "Access
+blocked: This app's request is invalid" (`redirect_uri_mismatch`) page. Use
+`http://localhost:3000` locally (`npm run dev` binds to it); the app moves
+`127.0.0.1` visits to `localhost`.
+
+Google returns the token in the URL fragment, which browsers never send to a
+server. The app checks a random `state` value kept in session storage for the
+duration of the redirect, removes the token from the address bar immediately,
+and holds it in memory only.
 
 The app requests only `openid`, `email`,
 `https://www.googleapis.com/auth/drive.file`, and

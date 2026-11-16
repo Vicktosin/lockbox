@@ -3,8 +3,10 @@ import { ArrowRight, LockKeyhole, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { AccountSession } from '../auth/api'
 import {
+  beginGoogleSignIn,
+  completeGoogleSignIn,
+  hasGoogleRedirectResult,
   prepareGoogleSignIn,
-  signInWithGoogle,
   type GooglePublicConfig,
   type GoogleWebSession,
 } from './google-auth'
@@ -24,7 +26,7 @@ export function GoogleAuthGate() {
   useEffect(() => {
     // Google OAuth origins are exact: http://localhost:3000 is authorized,
     // http://127.0.0.1:3000 is not. Move loopback-IP visits to localhost so
-    // the sign-in popup is not rejected with origin_mismatch.
+    // Google does not reject the sign-in redirect for an unregistered origin.
     const { hostname, protocol, port, pathname, search, hash } = window.location
     if (hostname === '127.0.0.1' || hostname === '[::1]') {
       window.location.replace(
@@ -34,10 +36,19 @@ export function GoogleAuthGate() {
     }
     let active = true
     void prepareGoogleSignIn()
-      .then((value) => {
-        if (active) {
-          setConfig(value)
-          setError('')
+      .then(async (value) => {
+        if (!active) return
+        setConfig(value)
+        setError('')
+        if (!hasGoogleRedirectResult()) return
+        setBusy(true)
+        try {
+          const session = await completeGoogleSignIn(value)
+          if (!active) return
+          setGoogle(session)
+          setFolder(null)
+        } finally {
+          if (active) setBusy(false)
         }
       })
       .catch((reason: unknown) => {
@@ -54,6 +65,16 @@ export function GoogleAuthGate() {
     return () => {
       active = false
     }
+  }, [])
+
+  useEffect(() => {
+    // Returning with the browser Back button from Google restores this page
+    // from cache with the button still busy; reset it.
+    const reset = (event: PageTransitionEvent) => {
+      if (event.persisted) setBusy(false)
+    }
+    window.addEventListener('pageshow', reset)
+    return () => window.removeEventListener('pageshow', reset)
   }, [])
 
   const onFolderReady = useCallback(
@@ -95,20 +116,17 @@ export function GoogleAuthGate() {
     }
   }, [google, folder])
 
-  async function signIn() {
+  function signIn() {
     if (!config || busy) return
-    setBusy(true)
     setError('')
     try {
-      const value = await signInWithGoogle(config)
-      setGoogle(value)
-      setFolder(null)
+      setBusy(true)
+      beginGoogleSignIn(config)
     } catch (reason) {
+      setBusy(false)
       setError(
         reason instanceof Error ? reason.message : 'Google sign-in failed.',
       )
-    } finally {
-      setBusy(false)
     }
   }
 
@@ -200,7 +218,7 @@ export function GoogleAuthGate() {
         <Button
           type="button"
           disabled={!config || busy || configLoading}
-          onClick={() => void signIn()}
+          onClick={() => signIn()}
           className="w-full"
         >
           {busy ? 'Waiting for Google…' : 'Sign in with Google'}

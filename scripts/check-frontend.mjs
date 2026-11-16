@@ -282,45 +282,28 @@ try {
     }
   })
 
-  await test('Google sign-in requests only declared scopes and stores no token', async () => {
+  await test('Google sign-in redirects with declared scopes and keeps no token', async () => {
     const requestedScopes = [
       'openid',
       'email',
       'https://www.googleapis.com/auth/drive.file',
       'https://www.googleapis.com/auth/drive.appdata',
     ]
-    let tokenOptions
-    let prompt
-    dom.google = {
-      accounts: {
-        oauth2: {
-          initTokenClient(options) {
-            tokenOptions = options
-            return {
-              requestAccessToken(value) {
-                prompt = value.prompt
-                options.callback({
-                  access_token: 'fictional-access-token-123456',
-                  expires_in: 3600,
-                  scope: [
-                    'openid',
-                    'https://www.googleapis.com/auth/userinfo.email',
-                    'https://www.googleapis.com/auth/userinfo.profile',
-                    'https://www.googleapis.com/auth/drive.file',
-                    'https://www.googleapis.com/auth/drive.appdata',
-                  ].join(' '),
-                })
-              },
-            }
-          },
-        },
+    const clientId = '123456789-test.apps.googleusercontent.com'
+    let assigned = ''
+    const originalAssign = dom.location.assign
+    Object.defineProperty(dom.location, 'assign', {
+      configurable: true,
+      writable: true,
+      value: (url) => {
+        assigned = String(url)
       },
-    }
+    })
     globalThis.fetch = async (url, options) => {
       if (String(url) === '/api/google/config')
         return response({
           configured: true,
-          clientId: '123456789-test.apps.googleusercontent.com',
+          clientId,
           apiKey: 'AIza' + 'a'.repeat(30),
           appId: '123456789',
         })
@@ -338,7 +321,7 @@ try {
         email_verified: true,
       })
     }
-    const root = createRoot(container)
+    let root = createRoot(container)
     try {
       await act(async () => root.render(createElement(GoogleAuthGate)))
       await waitForText(/Continue with Google/)
@@ -347,15 +330,84 @@ try {
       )
       assert.ok(button && !button.disabled)
       await act(async () => button.click())
+      const auth = new URL(assigned)
+      assert.equal(
+        auth.origin + auth.pathname,
+        'https://accounts.google.com/o/oauth2/v2/auth',
+      )
+      assert.equal(auth.searchParams.get('client_id'), clientId)
+      assert.equal(
+        auth.searchParams.get('redirect_uri'),
+        'https://lockbox.example/',
+      )
+      assert.equal(auth.searchParams.get('response_type'), 'token')
+      assert.equal(auth.searchParams.get('scope'), requestedScopes.join(' '))
+      assert.equal(auth.searchParams.get('prompt'), 'select_account consent')
+      const state = auth.searchParams.get('state')
+      assert.match(state, /^[0-9a-f]{64}$/)
+      assert.equal(dom.localStorage.length, 0)
+      await act(async () => root.unmount())
+
+      // Google redirects back with the token in the URL fragment.
+      dom.history.replaceState(
+        null,
+        '',
+        '/#' +
+          new URLSearchParams({
+            access_token: 'fictional-access-token-123456',
+            token_type: 'Bearer',
+            expires_in: '3600',
+            scope: [
+              'openid',
+              'https://www.googleapis.com/auth/userinfo.email',
+              'https://www.googleapis.com/auth/userinfo.profile',
+              'https://www.googleapis.com/auth/drive.file',
+              'https://www.googleapis.com/auth/drive.appdata',
+            ].join(' '),
+            state,
+          }).toString(),
+      )
+      root = createRoot(container)
+      await act(async () => root.render(createElement(GoogleAuthGate)))
       await waitForText(/Choose your storage/)
-      assert.equal(tokenOptions.scope, requestedScopes.join(' '))
-      assert.equal(prompt, 'select_account consent')
       assert.match(container.textContent, /person@example\.test/)
+      assert.equal(dom.location.hash, '')
       assert.equal(dom.localStorage.length, 0)
       assert.equal(dom.sessionStorage.length, 0)
     } finally {
       await act(async () => root.unmount())
-      delete dom.google
+      Object.defineProperty(dom.location, 'assign', {
+        configurable: true,
+        writable: true,
+        value: originalAssign,
+      })
+    }
+  })
+
+  await test('Google sign-in rejects a redirect response with a foreign state', async () => {
+    dom.sessionStorage.setItem('lockbox.google.oauth', 'a'.repeat(64))
+    dom.history.replaceState(
+      null,
+      '',
+      '/#access_token=stolen-token&expires_in=3600&state=' + 'b'.repeat(64),
+    )
+    globalThis.fetch = async (url) => {
+      assert.equal(String(url), '/api/google/config')
+      return response({
+        configured: true,
+        clientId: '123456789-test.apps.googleusercontent.com',
+        apiKey: 'AIza' + 'a'.repeat(30),
+        appId: '123456789',
+      })
+    }
+    const root = createRoot(container)
+    try {
+      await act(async () => root.render(createElement(GoogleAuthGate)))
+      await waitForText(/did not match this browser session/)
+      assert.equal(dom.location.hash, '')
+      assert.equal(dom.sessionStorage.length, 0)
+    } finally {
+      await act(async () => root.unmount())
     }
   })
 } finally {
