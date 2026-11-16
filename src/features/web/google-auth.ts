@@ -137,10 +137,7 @@ function requestGoogleToken(clientId: string) {
               .filter(Boolean)
               .map(normalizeScope),
           )
-          if (
-            !requestedScopes.every((scope) => granted.has(scope)) ||
-            [...granted].some((scope) => !requestedScopes.includes(scope))
-          ) {
+          if (!requestedScopes.every((scope) => granted.has(scope))) {
             reject(
               new Error(
                 'Google returned permissions that do not match this app.',
