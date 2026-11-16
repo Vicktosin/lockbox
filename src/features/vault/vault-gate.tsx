@@ -94,7 +94,10 @@ export function VaultGate({
     } catch (reason) {
       if (reason instanceof AuthApiError && reason.status === 401) onExpired()
       else if (live.current)
-        setError('Unable to load the encrypted vault from Google Drive.')
+        setError(
+          'Unable to load the encrypted vault from Google Drive. ' +
+            (reason instanceof Error ? reason.message : ''),
+        )
     } finally {
       if (live.current) setLoading(false)
     }

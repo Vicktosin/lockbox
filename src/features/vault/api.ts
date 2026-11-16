@@ -26,8 +26,7 @@ export async function requestVault<T>(
       code?: unknown
     }
     const code = typeof data.code === 'string' ? data.code : 'REQUEST_FAILED'
-    if (response.status === 401)
-      throw new AuthApiError(response.status, code)
+    if (response.status === 401) throw new AuthApiError(response.status, code)
     if (response.status === 409)
       throw new Error(
         'Drive contains a newer vault revision. Refresh the vault and review the current copy before saving again.',
@@ -39,12 +38,16 @@ export async function requestVault<T>(
           : 'Google Drive denied access. Check this account’s folder permissions.',
       )
     if (code === 'DRIVE_FILE_TOO_LARGE')
-      throw new Error('This encrypted vault or its history exceeds the Drive file limit.')
+      throw new Error(
+        'This encrypted vault or its history exceeds the Drive file limit.',
+      )
     if (code === 'DRIVE_FOLDER_REQUIRED')
       throw new Error('Choose a Google Drive folder before opening the vault.')
     if (response.status >= 500)
       throw new Error(
-        'Google Drive could not complete the request. Your unsaved change was not confirmed; refresh before retrying.',
+        'Google Drive could not complete the request (' +
+          code +
+          '). Your unsaved change was not confirmed; refresh before retrying.',
       )
     throw new Error('The vault request was rejected (' + code + ').')
   }

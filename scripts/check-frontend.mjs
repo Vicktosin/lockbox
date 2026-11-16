@@ -172,11 +172,10 @@ try {
     }
     globalThis.fetch = async (input) => {
       const url = new URL(String(input))
-      const json = (value, etag) =>
+      // Real Drive sends no ETag header; metadata carries `version` instead.
+      const json = (value) =>
         new Response(JSON.stringify(value), {
-          headers: etag
-            ? { 'content-type': 'application/json', etag }
-            : { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json' },
         })
       if (url.pathname === `/drive/v3/files/${folderId}`)
         return json({
@@ -194,11 +193,11 @@ try {
       if (url.pathname === '/drive/v3/files/account-fixture')
         return url.searchParams.get('alt') === 'media'
           ? json(account)
-          : json(files['account-fixture'], '"account-revision-1"')
+          : json({ ...files['account-fixture'], version: '1' })
       if (url.pathname === '/drive/v3/files/household-fixture')
         return url.searchParams.get('alt') === 'media'
           ? json(household)
-          : json(files['household-fixture'], '"household-revision-1"')
+          : json({ ...files['household-fixture'], version: '1' })
       throw new Error('Unexpected mocked Drive request: ' + url)
     }
 

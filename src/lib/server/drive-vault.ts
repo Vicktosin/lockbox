@@ -20,17 +20,24 @@ const householdName = 'lockbox-household-v1.json'
 const maxDriveFileBytes = 10 * 1024 * 1024
 const historyLimit = 12
 
+function validVersion(value: unknown): value is string {
+  return typeof value === 'string' && /^[0-9]{1,20}$/.test(value)
+}
+
 interface DriveFile {
   id: string
   name: string
   mimeType: string
   parents?: string[]
   trashed?: boolean
+  version?: string
 }
 
+// Google Drive does not send an HTTP ETag header and does not honour If-Match,
+// so the file's monotonically increasing `version` is the concurrency token.
 interface FileSnapshot<T> {
   id: string
-  etag: string
+  version: string
   value: T
 }
 
@@ -290,7 +297,7 @@ export class DriveVaultService {
   private async json<T>(
     url: string,
     init?: RequestInit,
-  ): Promise<{ value: T; etag: string }> {
+  ): Promise<{ value: T }> {
     let response: Response
     try {
       response = await googleRequest(this.token, url, init)
@@ -298,9 +305,8 @@ export class DriveVaultService {
       throw new GoogleHttpError(502, 'GOOGLE_DRIVE_TEMPORARILY_UNAVAILABLE')
     }
     if (!response.ok) throw await driveError(response)
-    const etag = response.headers.get('etag') ?? ''
     const value = (await response.json()) as T
-    return { value, etag }
+    return { value }
   }
 
   private async readContent<T>(id: string) {
@@ -392,7 +398,7 @@ export class DriveVaultService {
     )
       throw new GoogleHttpError(502, 'DRIVE_ACCOUNT_FILE_INVALID')
     const meta = await this.json<DriveFile>(
-      `${driveBase}/files/${encodeURIComponent(file.id)}?fields=id%2Cname%2CmimeType%2Cparents%2Ctrashed`,
+      `${driveBase}/files/${encodeURIComponent(file.id)}?fields=id%2Cname%2CmimeType%2Cparents%2Ctrashed%2Cversion`,
     )
     if (
       meta.value.id !== file.id ||
@@ -401,11 +407,11 @@ export class DriveVaultService {
       meta.value.trashed
     )
       throw new GoogleHttpError(502, 'DRIVE_ACCOUNT_FILE_INVALID')
-    if (!meta.etag)
+    if (!validVersion(meta.value.version))
       throw new GoogleHttpError(502, 'DRIVE_CONCURRENCY_UNAVAILABLE')
     return {
       id: file.id,
-      etag: meta.etag,
+      version: meta.value.version,
       value: accountDocument(await this.readContent(file.id)),
     }
   }
@@ -427,7 +433,7 @@ export class DriveVaultService {
     )
       throw new GoogleHttpError(502, 'DRIVE_HOUSEHOLD_FILE_INVALID')
     const meta = await this.json<DriveFile>(
-      `${driveBase}/files/${encodeURIComponent(file.id)}?fields=id%2Cname%2CmimeType%2Cparents%2Ctrashed`,
+      `${driveBase}/files/${encodeURIComponent(file.id)}?fields=id%2Cname%2CmimeType%2Cparents%2Ctrashed%2Cversion`,
     )
     if (
       meta.value.id !== file.id ||
@@ -437,11 +443,11 @@ export class DriveVaultService {
       !meta.value.parents?.includes(this.folderId)
     )
       throw new GoogleHttpError(502, 'DRIVE_HOUSEHOLD_FILE_INVALID')
-    if (!meta.etag)
+    if (!validVersion(meta.value.version))
       throw new GoogleHttpError(502, 'DRIVE_CONCURRENCY_UNAVAILABLE')
     return {
       id: file.id,
-      etag: meta.etag,
+      version: meta.value.version,
       value: householdDocument(await this.readContent(file.id)),
     }
   }
@@ -488,7 +494,7 @@ export class DriveVaultService {
 
   private async findById<T>(id: string): Promise<FileSnapshot<T> | null> {
     const meta = await this.json<DriveFile>(
-      `${driveBase}/files/${encodeURIComponent(id)}?fields=id%2Cname%2CmimeType%2Cparents%2Ctrashed`,
+      `${driveBase}/files/${encodeURIComponent(id)}?fields=id%2Cname%2CmimeType%2Cparents%2Ctrashed%2Cversion`,
     )
     if (
       meta.value.id !== id ||
@@ -498,9 +504,13 @@ export class DriveVaultService {
         : !meta.value.parents?.includes(this.folderId))
     )
       throw new GoogleHttpError(502, 'DRIVE_FILE_OUTSIDE_NAMESPACE')
-    if (!meta.etag)
+    if (!validVersion(meta.value.version))
       throw new GoogleHttpError(502, 'DRIVE_CONCURRENCY_UNAVAILABLE')
-    return { id, etag: meta.etag, value: await this.readContent<T>(id) }
+    return {
+      id,
+      version: meta.value.version,
+      value: await this.readContent<T>(id),
+    }
   }
 
   private async writeFile<T>(
@@ -520,6 +530,14 @@ export class DriveVaultService {
     }
     if (new TextEncoder().encode(text).length > maxDriveFileBytes)
       throw new GoogleHttpError(413, 'DRIVE_FILE_TOO_LARGE')
+    // Refuse to overwrite a file another session changed since it was read.
+    const { value: current } = await this.json<DriveFile>(
+      `${driveBase}/files/${encodeURIComponent(snapshot.id)}?fields=id%2Cversion`,
+    )
+    if (current.id !== snapshot.id || !validVersion(current.version))
+      throw new GoogleHttpError(502, 'DRIVE_CONCURRENCY_UNAVAILABLE')
+    if (current.version !== snapshot.version)
+      throw new GoogleHttpError(409, 'DRIVE_REVISION_CONFLICT')
     let response: Response
     try {
       response = await googleRequest(
@@ -529,7 +547,6 @@ export class DriveVaultService {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json; charset=UTF-8',
-            'If-Match': snapshot.etag,
           },
           body: text,
         },
