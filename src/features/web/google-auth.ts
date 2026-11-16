@@ -54,6 +54,12 @@ const requestedScopes = [
   'https://www.googleapis.com/auth/drive.appdata',
 ]
 
+function normalizeScope(scope: string) {
+  return scope === 'https://www.googleapis.com/auth/userinfo.email'
+    ? 'email'
+    : scope
+}
+
 let identityScript: Promise<void> | null = null
 
 async function loadIdentityScript() {
@@ -125,12 +131,15 @@ function requestGoogleToken(clientId: string) {
             reject(new Error('Google access was not approved.'))
             return
           }
-          const granted = new Set((response.scope ?? '').split(/\s+/))
+          const granted = new Set(
+            (response.scope ?? '')
+              .split(/\s+/)
+              .filter(Boolean)
+              .map(normalizeScope),
+          )
           if (
             !requestedScopes.every((scope) => granted.has(scope)) ||
-            [...granted].some(
-              (scope) => scope && !requestedScopes.includes(scope),
-            )
+            [...granted].some((scope) => !requestedScopes.includes(scope))
           ) {
             reject(
               new Error(
