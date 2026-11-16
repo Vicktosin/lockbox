@@ -150,10 +150,16 @@ function requestGoogleToken(clientId: string) {
             expiresAt: Date.now() + expiresIn * 1000,
           })
         },
-        error_callback: () => {
+        error_callback: (error) => {
           if (settled) return
           settled = true
-          reject(new Error('Google sign-in was cancelled or blocked.'))
+          const message =
+            error.type === 'popup_failed_to_open'
+              ? 'The Google sign-in popup was blocked. Allow pop-ups for this site and try again.'
+              : error.type === 'popup_closed'
+                ? 'The Google sign-in popup closed before authorization completed. Keep it open until Google returns to Lockbox.'
+                : 'Google sign-in could not complete. Allow pop-ups for this site and try again.'
+          reject(new Error(message))
         },
       })
       client.requestAccessToken({ prompt: 'select_account consent' })

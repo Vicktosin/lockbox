@@ -17,7 +17,9 @@ Set these public browser configuration values in the Next.js deployment:
 The same values may be placed in `.env.local` during local development. Do not
 add a client secret or service-account key: this application uses Google's
 browser OAuth token flow. Enable the Google Drive API and configure the OAuth
-consent screen and exact website origins in Google Cloud.
+consent screen and exact website origins in Google Cloud. The web deployment
+sets `Cross-Origin-Opener-Policy: same-origin-allow-popups` so Google Identity
+Services can communicate with its OAuth popup.
 
 The app requests only `openid`, `email`,
 `https://www.googleapis.com/auth/drive.file`, and

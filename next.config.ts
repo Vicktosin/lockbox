@@ -11,6 +11,10 @@ const nextConfig: NextConfig = {
           { key: 'Referrer-Policy', value: 'no-referrer' },
           { key: 'X-Frame-Options', value: 'DENY' },
           {
+            key: 'Cross-Origin-Opener-Policy',
+            value: 'same-origin-allow-popups',
+          },
+          {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
