@@ -219,11 +219,11 @@ export function AppShell({
           </div>
           <div className="demo-indicator">
             <span />
-            {vaultActive ? 'Encrypted local vault' : 'Frontend demo'}{' '}
+            {vaultActive ? 'Encrypted Drive vault' : 'Frontend demo'}{' '}
             <CircleHelp size={13}>
               <title>
                 {vaultActive
-                  ? 'Client-encrypted data; cloud status is available in Settings'
+                  ? 'Client-encrypted data is stored in Google Drive'
                   : 'Sample vault data only; no vault encryption or cloud sync'}
               </title>
             </CircleHelp>

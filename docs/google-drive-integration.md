@@ -1,77 +1,93 @@
-# Google Drive encrypted storage and synchronisation
+# Google identity and Drive storage
 
-Phase 7: [current release validation](phase7-release-validation.md) records actual Chrome/Edge runtime and private Caddy evidence, internal fixes and outstanding live Google/UI/physical-device/systemd/independent-review gates. Historical phase statements are not present-release certification.
+The current web application uses Google identity and Drive as its account and
+vault storage providers. The Next.js App Router API routes run as part of the
+same Vercel deployment as the React interface. They are stateless and do not
+use SQLite, server-side sessions, or durable local files.
 
-Phase 6 update: [Current release assessment and recovery rehearsal](phase6-release-assessment.md) supersedes earlier deferred off-device/compaction/helper descriptions. Automatic verified encrypted Drive backups, archived-history retrieval and a private recovery assistant are implemented. Live Google, actual production ingress/browser validation and independent review remain outstanding; no public deployment or production-security certification is claimed.
+## Google configuration
 
-Current Phase 5 recovery/backup/deployment details: [guide](phase5-recovery-production.md). Google remains unconnected and live validation is pending.
+Set these public browser configuration values in the Next.js deployment:
 
-Phase 4 implements the Google Drive API v3 provider, real server OAuth flow, encrypted tokens, bidirectional synchronisation and Settings controls. It replaces the previous optional-backup-only plan. No Google account is connected in the development environment: a developer-owned Google application registration has not been supplied.
+- `GOOGLE_CLIENT_ID`: OAuth 2.0 web client ID.
+- `GOOGLE_API_KEY`: API key for Google Drive Picker, restricted to the deployed
+  website origin and required APIs.
+- `GOOGLE_APP_ID`: numeric Google Cloud project number used by Picker.
 
-## Household-user experience
+The same values may be placed in `.env.local` during local development. Do not
+add a client secret or service-account key: this application uses Google's
+browser OAuth token flow. Enable the Google Drive API and configure the OAuth
+consent screen and exact website origins in Google Cloud.
 
-The administrator opens Google Drive in Settings, pastes a private folder link, selects Connect Google Drive and approves Google's consent page. Lockbox validates the account/folder, stores encrypted backend tokens and starts sync automatically. No Cloud Console, project, API key, secret, environment edit, database command or file transfer is part of this user flow.
+The app requests only `openid`, `email`,
+`https://www.googleapis.com/auth/drive.file`, and
+`https://www.googleapis.com/auth/drive.appdata`. Google Identity Services
+provides a short-lived access token to the browser. The browser keeps it in
+memory, sends it as a bearer token to same-origin API routes, and drops it on
+expiry or sign-out. The server verifies the token with Google's user-info
+endpoint and uses it directly for Drive requests; it does not persist tokens
+or create a server session.
 
-The wife uses her own Lockbox account. She can use Sync Now and synchronise her Personal/shared vaults through the backend without receiving Google credentials or access to the administrator's Google account. Connection/disconnection remains administrator-only.
+This replaces the earlier username/password and SQLite-backed web accounts.
+No automatic import of existing accounts or database records is provided; a
+Google identity starts with its own Drive-backed vault.
 
-Settings shows configuration availability, actual connection/account/folder, last successful sync, pending/error/conflict states, Sync Now and Disconnect. The workspace indicator reflects status instead of assuming a connection. Authenticated locked users can open Google Drive settings without decrypting vault data.
+## Data locations and access
 
-A folder link does not grant API access. Until deployment registration exists, Connect is unavailable and the UI says the maintainer must enable it. There is no fake-connected fallback.
+- Personal profile and encrypted Personal vault data are stored as a private
+  JSON file in that Google account's `appDataFolder`.
+- Encrypted Household data is stored as a separate JSON file in the
+  owner-selected Drive folder. The folder is selected or created using Google
+  Picker; an ID alone is not treated as proof of access.
+- The Household owner invites a Google email. The API grants that account
+  writer permission on the folder. The invited account must sign in with that
+  email and enter the Household key shared by the owner before it can decrypt
+  the vault.
+- Removing a joined member rotates the Household key, updates the encrypted
+  profile and Household data, then removes that member's Drive permission.
+  Previously copied secrets or ciphertext cannot be recalled.
 
-## Developer/deployer dependency — not household setup
+Vault documents and master/recovery key wrappers are encrypted in the browser.
+Google Drive stores ciphertext plus the minimum public metadata needed for
+routing, revisions, and access control. The server does not receive the master
+password or decryption keys.
 
-The developer must register a confidential Google OAuth web application, enable Drive API v3, configure consent/branding/privacy information and complete Google's applicable production verification/security-assessment requirements. Register the exact callback LOCKBOX_APP_ORIGIN/api/drive/callback; the local development default is http://localhost:5173/api/drive/callback. Production requires the configured HTTPS origin.
+## API and concurrency behavior
 
-Supply LOCKBOX_GOOGLE_CLIENT_ID and LOCKBOX_GOOGLE_CLIENT_SECRET only through backend deployment secret configuration. Never VITE_ variables, source control, browser storage or a household-user form. The backend validates missing/partial configuration; both absent leave the working local application available with Drive clearly unavailable.
+The Next.js API verifies Google identity for each request, validates the
+selected folder, and limits file operations to the expected Personal app-data
+file or Household file in that folder. Requests are same-origin, uncached, and
+bounded in size. The server rejects malformed or oversized Drive documents
+rather than treating them as empty vaults.
 
-The paste-any-existing-folder experience uses https://www.googleapis.com/auth/drive. The narrower drive.file scope requires app-created/opened/Picker-authorised files and cannot grant access to an arbitrary pasted folder by itself. The broader token technically grants broader Drive capabilities; application code confines file operations to the selected folder. This tradeoff and the associated Google verification requirements must be reviewed before release. No Google Sign-In account authentication is introduced.
+Vault updates use Drive ETags with `If-Match`. Missing ETags and failed
+conditional updates are rejected; the app must not silently overwrite a newer
+revision. Drive move and membership-revocation flows record pending state so a
+later request can finish or report an interrupted update. Google Drive's
+conditional-write and permission behavior still needs live testing; automated
+tests alone do not validate provider semantics.
 
-References: [Google web-server OAuth](https://developers.google.com/identity/protocols/oauth2/web-server), [Drive scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth), [token best practices](https://developers.google.com/identity/protocols/oauth2/resources/best-practices), [Drive permissions](https://developers.google.com/workspace/drive/api/guides/manage-sharing).
+Up to 12 encrypted prior revisions are retained per vault for recovery of
+deleted entries. This is a bounded in-file history, not an independent backup.
+The user must maintain separate backups of anything they cannot afford to
+lose.
 
-## OAuth and token protection
+## Deployment and remaining checks
 
-The consent request uses the supported authorisation-code flow, offline access, consent and PKCE S256. A random one-use state is digest-stored, expires in ten minutes and is bound to the administrator's current server session. The verifier/folder attempt are encrypted in SQLite. The callback consumes state before token exchange, validates granted scope/offline access and confirms the attempt/session/connection epoch still match.
+Deploy the repository root as a Next.js project on Vercel and add the three
+Google settings to the appropriate Vercel environments. The deployment does
+not require a separate API service, database, or persistent filesystem. A
+missing or malformed Google configuration leaves sign-in unavailable rather
+than simulating a connected account.
 
-Folder validation requires a private, owner-only My Drive folder owned by the authorised account, writable and not trashed. Shared drives, public/domain sharing and folders shared with non-owners are rejected. No permissions are made public or modified.
+No live OAuth client or API key is configured in this repository. Before
+production use, validate Google consent, Picker selection, `drive.appdata`
+access, shared-folder access for invited users, conditional updates, permission
+revocation, rate limits, and production CSP with the real Google project.
+Independent security review and restore testing remain necessary before
+relying on Lockbox for important credentials.
 
-Access/refresh tokens are backend-only, encrypted using a standard HKDF-derived subkey of the existing protected server key and native AES-256-GCM. Context binds database identity, token purpose and connection epoch. Refresh is single-flight; invalid grants require reconnection. Disconnect clears local credentials/pending attempts first, aborts provider requests and attempts Google revocation. Failed remote revocation is reported; corrupt tokens can still be cleared locally. An old callback/refresh cannot resurrect a disconnected connection.
-
-No master password, vault key or login password enters Google OAuth requests. User-facing responses and allowlisted logs never expose tokens, client secrets, verifiers or OAuth callback URLs/bodies.
-
-## Three namespaces and cryptographic boundaries
-
-Snapshots are independent for personal:administratorId, personal:partnerId and household:householdVaultId. Personal snapshots contain that account's already wrapped Phase 3 profile plus its encrypted Personal document. The shared snapshot contains the encrypted Household document/check and server-authoritative membership records. Account login hashes and sessions are not uploaded.
-
-All credential/folder fields were encrypted in the browser before SQLite persistence. The backend never decrypts them. Client master/recovery/Personal/Household keys and wrapping remain unchanged. A second server-authenticated encryption layer protects cloud metadata/records and membership integrity using the existing protected server key; that key is never uploaded.
-
-Namespace validation checks account IDs, scope, owner IDs, revisions and exact Phase 3 envelope/KDF formats. There is no arbitrary Drive-file download endpoint, impersonation field or administrator private-vault read override. Wife-side status exposes only her Personal/shared metadata, not administrator ciphertext or Google tokens.
-
-## Sync protocol
-
-SQLite remains the local durable cache/account authority. Changes schedule a debounced sync after 1.5 seconds; the backend also polls every minute. Temporary errors use bounded exponential retry/jitter and persist retry state. Sync Now triggers the same worker. A durable expiring SQLite lease and in-process single-flight guard prevent duplicate local jobs.
-
-File IDs are preallocated and recorded before upload. Lost create responses are retried with the same ID; a duplicate-ID response is authenticated/read back instead of creating duplicate commits blindly.
-
-Snapshots and commits are immutable. Each encrypted commit references complete snapshot hashes/IDs and parent commit hashes. All required snapshots upload before the commit is published, so keyring/shared-key/membership changes become visible together. Older data is not overwritten. Cache entries are authenticated and keyed by Drive file version; listing identifies Lockbox files by application/kind/hash properties in the selected folder.
-
-Per-namespace checkpoints compare local and remote content. One-sided updates upload/download; disjoint namespace changes can merge automatically. Both-sided changes or multiple concurrent heads become explicit conflicts. Local changes arriving during upload are retained and flagged. Import checks the captured local fingerprint inside an immediate transaction; it never blindly overwrites a newer local save.
-
-Conflict copies remain preserved in Drive. Each registered household account must approve the same complete local/cloud copy before resolving; the administrator cannot approve replacement of the wife's private vault. Stale approvals are discarded when copies change. Resolution publishes a commit joining the heads, retaining history. It is copy selection, not a plaintext field-level merge.
-
-A cloud import updates encrypted profiles/documents/membership atomically and revokes existing sessions. Signing in again and master-unlocking prevents stale decrypted keys and revision ABA, including explicit selection of an older copy. Ordinary uploads from the central backend do not sign users out.
-
-## Adapter operations and limits
-
-The REST adapter supports folder/account validation, paginated identification/listing, generated IDs, encrypted create/read and conditional update/trash with parent/application/kind checks. Sync itself never mutates or trashes committed history and does not rely on undocumented last-writer-wins/ETag behaviour. Conditional maintenance methods refuse missing/mismatched ETags; live Google behaviour remains an external validation gate.
-
-The current cap is 10,000 listed files and 100 pages per listing, with bounded response sizes and timeouts. History compaction/retention and a previous-version browser are not implemented. Missing/tampered history stops safely instead of inventing an empty vault or deleting local data.
-
-## Deployment, recovery and remaining verification
-
-The existing database ID/account identities and protected server key must persist across deployments. A cloned/restored installation with those identities can initially download cloud vault state. A fresh unrelated account database/key is a different installation; a folder link or master password alone cannot restore account records/server cloud metadata. Maintain encrypted account-database backups and a separate protected key backup as developer/operator responsibilities, not manual user file transfers.
-
-Startup now applies pending migrations after an encrypted pre-upgrade backup; users do not run database commands. Staged restore removes Google tokens, pending OAuth states, checkpoints/caches/conflicts so old grants cannot revive. Account-login recovery is still deferred and restored accounts remain reset-required; Phase 5 must implement/test account recovery before a complete production disaster-recovery claim.
-
-Real Google consent, verification, quota/conditional-write behaviour and browser deployment require developer credentials and live testing. All automated Google responses are mocked. The local vault, API adapter and sync engine are real implementations. Independent application/cryptographic review and production HTTPS/proxy callback-log redaction remain release gates.
-
-[Phase 4 report](phase4-report.md) · [architecture](architecture.md) · [operations](operations.md)
+References: [Google Identity Services](https://developers.google.com/identity/gsi/web/guides/overview),
+[Drive API scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth),
+[Drive API files](https://developers.google.com/workspace/drive/api/reference/rest/v3/files),
+[Drive permissions](https://developers.google.com/workspace/drive/api/guides/manage-sharing).

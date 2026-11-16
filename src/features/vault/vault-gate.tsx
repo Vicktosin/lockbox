@@ -23,9 +23,7 @@ import { destroyKeys } from './crypto'
 import { createVaultApi } from './api'
 import { IdleLock } from './idle-lock'
 import { clearSecretClipboard } from '@/lib/secure-clipboard'
-import { DriveSettings } from '../drive/drive-settings'
-import { RecoveryPanel } from '../auth/recovery-panel'
-import { BackupSettings } from '../settings/backup-settings'
+import { GoogleDriveSetup } from '../web/google-drive-setup'
 
 type Draft =
   | { kind: 'setup'; value: SetupDraft }
@@ -33,16 +31,16 @@ type Draft =
 export function VaultGate({
   session,
   onLogout,
-  onSignedOut,
   onExpired,
+  onDriveFolderChange,
 }: {
   session: AccountSession
   onLogout: () => void
-  onSignedOut: () => void
   onExpired: () => void
+  onDriveFolderChange: (folder: { id: string; name: string }) => void
 }) {
   const api = useMemo<VaultApi>(() => {
-    const request = createVaultApi(session.csrfToken)
+    const request = createVaultApi(session)
     return async (path, body) => {
       try {
         return await request(path, body)
@@ -51,7 +49,7 @@ export function VaultGate({
         throw error
       }
     }
-  }, [session.csrfToken, onExpired])
+  }, [session, onExpired])
   const [state, setState] = useState<VaultState | null>(null),
     [engine, setEngine] = useState<VaultEngine | null>(null),
     [busy, setBusy] = useState(false),
@@ -96,9 +94,7 @@ export function VaultGate({
     } catch (reason) {
       if (reason instanceof AuthApiError && reason.status === 401) onExpired()
       else if (live.current)
-        setError(
-          'Unable to load the vault. Start the backend and check the connection.',
-        )
+        setError('Unable to load the encrypted vault from Google Drive.')
     } finally {
       if (live.current) setLoading(false)
     }
@@ -245,17 +241,10 @@ export function VaultGate({
         accountSession={session}
         engine={engine}
         onLock={lock}
+        onDriveFolderChange={onDriveFolderChange}
         onLogout={() => {
           lock()
           onLogout()
-        }}
-        onSignedOut={() => {
-          lock()
-          onSignedOut()
-        }}
-        onExpired={() => {
-          lock()
-          onExpired()
         }}
       />
     )
@@ -274,7 +263,7 @@ export function VaultGate({
           </h1>
           <p>
             Your master password stays on this device. Encrypted vault data is
-            saved to your local Lockbox backend.
+            saved to Google Drive after encryption.
           </p>
           <p className="field-hint">
             Independent security review is still required before relying on this
@@ -456,16 +445,19 @@ export function VaultGate({
           onClick={() => setCloudVisible((value) => !value)}
         >
           {cloudVisible
-            ? 'Hide account and cloud settings'
-            : 'Account recovery and Google Drive settings'}
+            ? 'Hide Google Drive settings'
+            : 'Google Drive settings'}
         </Button>
         {cloudVisible && (
           <>
-            <RecoveryPanel session={session} />
-            {session.user.role === 'administrator' && (
-              <BackupSettings session={session} />
+            {session.google && (
+              <GoogleDriveSetup
+                session={session.google}
+                onFolderReady={onDriveFolderChange}
+                onSignOut={onLogout}
+                compact
+              />
             )}
-            <DriveSettings session={session} onExpired={onExpired} />
           </>
         )}
       </div>

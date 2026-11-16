@@ -1,5 +1,4 @@
-import { AuthGate } from '@/features/auth/auth-gate'
-import { AccountPanel } from '@/features/auth/account-panel'
+import { GoogleAuthGate } from '@/features/web/google-auth-gate'
 import type { AccountSession } from '@/features/auth/api'
 import { useEffect, useState } from 'react'
 import { CheckCircle2, X } from 'lucide-react'
@@ -27,10 +26,7 @@ import type { VaultEngine } from '@/features/vault/engine'
 import { VaultSettings } from '@/features/vault/vault-settings'
 import { ExtensionBridge } from '@/features/extension/extension-bridge'
 import { VaultFolders } from '@/features/vault/folders'
-import { DriveSettings } from '@/features/drive/drive-settings'
-import { SyncIndicator } from '@/features/drive/sync-indicator'
-import { BackupSettings } from '@/features/settings/backup-settings'
-import { BackupAlert } from '@/features/settings/backup-alert'
+import { GoogleDriveSetup } from '@/features/web/google-drive-setup'
 
 type DialogState =
   | { type: 'details' | 'edit' | 'delete'; id: string }
@@ -40,17 +36,15 @@ type DialogState =
 export function DemoWorkspace({
   accountSession,
   onLogout,
-  onSignedOut,
-  onExpired,
   engine,
   onLock,
+  onDriveFolderChange,
 }: {
   accountSession?: AccountSession
   onLogout?: () => void
-  onSignedOut?: () => void
-  onExpired?: () => void
   engine?: VaultEngine
   onLock?: () => void
+  onDriveFolderChange?: (folder: { id: string; name: string }) => void
 } = {}) {
   const { page, navigate } = useNavigation()
   const [credentials, setCredentials] = useState<Credential[]>(() =>
@@ -165,15 +159,6 @@ export function DemoWorkspace({
           <span>
             {busy ? 'Encrypting and saving…' : 'Encrypted before saving'}
           </span>
-          {onExpired && (
-            <SyncIndicator
-              onSettings={() => navigate('settings')}
-              onExpired={onExpired}
-            />
-          )}
-          {accountSession?.user.role === 'administrator' && (
-            <BackupAlert onSettings={() => navigate('settings')} />
-          )}
           <Button
             variant="ghost"
             size="sm"
@@ -231,20 +216,15 @@ export function DemoWorkspace({
           }
         />
       )}
-      {page === 'settings' && accountSession && onSignedOut && onExpired && (
-        <AccountPanel
-          session={accountSession}
-          onSignedOut={onSignedOut}
-          onExpired={onExpired}
-        />
-      )}
       {page === 'settings' && (
         <>
-          {engine && accountSession && onExpired && (
-            <DriveSettings session={accountSession} onExpired={onExpired} />
-          )}
-          {accountSession?.user.role === 'administrator' && (
-            <BackupSettings session={accountSession} />
+          {engine && accountSession?.google && onDriveFolderChange && (
+            <GoogleDriveSetup
+              session={accountSession.google}
+              onFolderReady={onDriveFolderChange}
+              onSignOut={onLogout ?? (() => {})}
+              compact
+            />
           )}
           {engine && onLock && (
             <VaultSettings
@@ -370,5 +350,5 @@ export function DemoWorkspace({
 }
 
 export default function App() {
-  return <AuthGate />
+  return <GoogleAuthGate />
 }

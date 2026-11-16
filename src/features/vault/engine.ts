@@ -27,7 +27,16 @@ import {
   type UnlockedKeys,
   type VaultProfile,
 } from './crypto.ts'
-export type VaultApi = (path: string, body?: unknown) => Promise<VaultState>
+export type VaultApi = <T = VaultState>(
+  path: string,
+  body?: unknown,
+) => Promise<T>
+export interface VaultHistoryEntry {
+  id: number
+  scope: string
+  revision: number
+  saved_at: number
+}
 export interface VaultFolder {
   id: string
   name: string
@@ -124,9 +133,9 @@ export class VaultEngine {
     state: VaultState,
     keys: UnlockedKeys,
   ) {
-    this.api = async (path, body) => {
+    this.api = async <T = VaultState>(path: string, body?: unknown) => {
       try {
-        return await api(path, body)
+        return await api<T>(path, body)
       } catch (error) {
         if ((error as { status?: number }).status === 401) this.lock()
         throw error
@@ -200,6 +209,16 @@ export class VaultEngine {
   }
   get encryptedState() {
     return structuredClone(this.state)
+  }
+  async history() {
+    this.requireKeys()
+    return this.api<{ history: VaultHistoryEntry[] }>('history')
+  }
+  async historicalVault(id: number) {
+    this.requireKeys()
+    if (!Number.isSafeInteger(id) || id < 1)
+      throw new Error('Invalid vault history entry.')
+    return this.api<{ vault: StoredVault }>('history?id=' + id)
   }
   lock() {
     this.epoch++

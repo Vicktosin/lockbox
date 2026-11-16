@@ -114,8 +114,12 @@ export function AuthGate() {
         key={session.user.id}
         session={session}
         onLogout={() => void logout()}
-        onSignedOut={signedOut}
         onExpired={expired}
+        onDriveFolderChange={({ id }) =>
+          setSession((current) =>
+            current ? { ...current, driveFolderId: id } : current,
+          )
+        }
       />
     </>
   )

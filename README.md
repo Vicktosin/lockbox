@@ -1,84 +1,68 @@
 # LOCKBOX
 
-Online preparation: [private staging and household hosting](docs/private-online-deployment.md) explains costs, current security gates, developer-only Google dependencies and the non-publishing deployment helper. No online deployment or migration of local data is implied.
+Lockbox is a Next.js application. Its React interface and server API routes are
+deployed together; the web runtime does not use a separately hosted Fastify
+server, SQLite database, or local filesystem for vault persistence.
 
-Current handoff: [controlled household release and installation](docs/household-release.md). Offline provisioning and an allowlisted release package are ready for maintainer testing. The optional extension is implemented as a separate approval-based candidate and excluded from the household release. No public deployment has been performed; real-secret use remains blocked on the live Google, Linux deployment, interactive acceptance and independent-review gates.
+## Storage and sign-in
 
-Phase 7: [current release validation](docs/phase7-release-validation.md) records actual Chrome/Edge runtime and private Caddy evidence, internal fixes and outstanding live Google/UI/physical-device/systemd/independent-review gates. Historical phase statements are not present-release certification.
+Sign in with Google. Personal vault records are encrypted in the browser and
+stored in the user's private Google Drive app-data area. The optional shared
+Household vault is encrypted in a Google Drive folder that its owner chooses
+and shares with invited Google accounts. The master password and decryption
+keys stay on the device; short-lived Google access tokens are held in memory
+only.
 
-Phase 6 update: [Current release assessment and recovery rehearsal](docs/phase6-release-assessment.md) supersedes earlier deferred off-device/compaction/helper descriptions. Automatic verified encrypted Drive backups, archived-history retrieval and a private recovery assistant are implemented. Live Google, actual production ingress/browser validation and independent review remain outstanding; no public deployment or production-security certification is claimed.
+The app requests the narrow `openid`, `email`, `drive.file`, and `drive.appdata`
+scopes. Google Identity Services and Drive Picker require public OAuth client
+ID, API key, and Cloud project number settings. Restrict the API key to the
+production website origin and required Google APIs. No Google client secret is
+used by the web runtime.
 
-Lockbox provides two household accounts, client-encrypted Personal/Household vaults and an implemented Google Drive storage/synchronisation integration. The existing React/TypeScript/Vite interface and Node/SQLite backend are retained.
+The previous username/password accounts and SQLite data are not automatically
+imported. Google sign-in creates a separate Drive-backed identity and vault;
+existing data remains in its old storage until separately migrated.
 
-**Independent security review and live Google/deployment validation are still required. Passing automated tests is not production-security certification.**
+Copy `.env.example` to `.env.local` and set:
 
-## Connect Google Drive
-
-Once the developer has enabled the registered Google application in the deployment:
-
-1. Open Settings → Google Drive.
-2. Paste a private Google Drive folder link owned by the administrator's Google account.
-3. Select Connect Google Drive and approve Google's permission request.
-4. Lockbox validates the connection and automatically synchronises encrypted vault files.
-
-The wife uses her own Lockbox account and Sync Now without the administrator's Google account or tokens. Settings shows the actual connection/account/folder, last sync, errors, conflicts and Disconnect. A Google Drive settings control is also available while the vault is locked.
-
-No household user needs Google Cloud Console, projects, API keys/secrets, environment edits, database commands or manual vault-file transfers. A folder link alone never grants access.
-
-**The current development environment has no registered Google client credentials, so it is not connected.** The UI truthfully shows that the maintainer must enable the connection. Registration, confidential backend credentials, callback configuration and Google's required production verification are developer/deployer dependencies described in [the integration guide](docs/google-drive-integration.md).
-
-## Vault use
-
-Sign in with a username/login password, then separately create/unlock your master-protected vault. Master passwords and decrypted vault keys stay on the device. Setup verifies the complete generated recovery key before saving; keep it privately outside Lockbox. Losing both master and recovery key loses vault decryption.
-
-The existing dashboard, search/category filters, list/grid, reveal/copy, generator, credential CRUD, folders and appearance controls remain. Saved credential/folder fields are encrypted before backend persistence. Master changes rewrap existing keys without rewriting credentials. Vault recovery is independent of account-login recovery. Settings now generates single-use login recovery codes after password reauthentication; the sign-in screen accepts these for login reset.
-
-The administrator creates the Household vault, separately grants the other account access and privately transfers its key. Joined accounts collaborate on shared contents; only its owner manages membership. Removing access rotates the shared key. Personal vaults stay isolated. Copied secrets/old snapshots cannot be recalled.
-
-Vaults lock on manual lock/logout/page exit or after five minutes idle, with background-return checks. Clipboard clearing is attempted after 30 seconds/on lock; browser permissions, OS history and secure physical JS-memory erasure remain platform limits.
-
-## Synchronisation and conflicts
-
-Three independent namespaces store both Personal vaults and the shared Household vault. Changes schedule sync automatically; Sync Now uses the same worker. Downloads preserve encrypted formats/key management and safely sign users out before changed vaults are unlocked again.
-
-Immutable encrypted snapshots/commits retain earlier versions. Both-sided or concurrent changes stop for review instead of overwriting newer data. Every registered household account must approve the same complete local/cloud copy before resolution, preserving control over private vault replacement. Stale approvals are rejected.
-
-A persistent account database identity and separately protected server key remain necessary for restoration. Drive is not a substitute for account-database/key backups. Complete encrypted backups, scheduled verification and clean restoration are implemented. Destructive cloud-history compaction, recovery after losing all login proof, offline browser storage and PWA registration remain outside this release. The Chrome companion is a separate candidate awaiting validation. No Supabase or Google Sign-In is introduced.
-
-## Developer running and checks
-
-Use Node 24. For a fresh source checkout install locked packages with npm ci. Start these in separate terminals:
-
-```powershell
-npm.cmd run dev:server
+```env
+GOOGLE_CLIENT_ID=your-public-oauth-client-id
+GOOGLE_API_KEY=your-restricted-browser-api-key
+GOOGLE_APP_ID=your-google-cloud-project-number
 ```
 
-```powershell
-npm.cmd run dev
-```
+Configure the OAuth client for the exact local and production web origins, and
+enable the Google Drive API. The user-facing app cannot connect to Google until
+these settings and Google's consent screen are configured.
 
-Open http://localhost:5173; it must match LOCKBOX_APP_ORIGIN. The developer-provisioned database/key from Phase 1 remain required. Backend startup automatically backs up/upgrades existing databases, so users do not run migration commands. Migration 4 was applied to this workspace through startup without seeding accounts or connecting Google.
+## Local development
+
+Use Node.js 22.12 or newer (or Node 24), then run:
 
 ```sh
-npm run typecheck
-npm run lint
-npm run format:check
-npm run test:backend
-npm run test:auth
-npm run test:vault
-npm run test:drive
-npm run test:recovery
-npm run test:storage
-npm run test:frontend
-npm run build
+npm ci
+npm run dev
 ```
 
-Google responses are mocked in tests; the runtime adapter is real REST API v3 code. No new dependencies were needed in Phase 4. Existing hash-wasm/noble client encryption and protected native AES-GCM backup infrastructure remain.
+Open <http://localhost:3000>. `npm run build` creates the Next.js production
+build, and `npm run start` serves it locally. `npm run typecheck` checks the
+Next.js application. Legacy Fastify/SQLite sources and scripts remain in the
+repository for backward compatibility; they are not part of the Next.js web
+runtime.
 
-[Phase 4 report and files](docs/phase4-report.md) · [Drive integration/deployment](docs/google-drive-integration.md) · [backend operations](server/README.md) · [architecture](docs/architecture.md) · [roadmap and exact Phase 5](docs/implementation-roadmap.md)
+## Vercel deployment
 
-## Recovery and production preparation
+Import this repository into Vercel with the repository root as the project
+root. Vercel detects Next.js and builds both the client interface and API
+routes. Add the three Google settings above as environment variables for the
+appropriate deployment environment, then deploy. No separate API host,
+database provisioning, or persistent Vercel filesystem is required.
 
-See [Phase 5 recovery and deployment](docs/phase5-recovery-production.md). Each user saves a login recovery code and a separate vault recovery key. The administrator also saves the emergency backup key outside backup storage. Settings reports real verified-backup status. Complete archives include SQLite, protected keys, encrypted records, permissions, history and deployment configuration; restoration invalidates sessions and Google grants. The maintainer operates clean-install restoration and automatic off-device backup delivery; household users run no technical commands. Live Google validation, independent review and remaining retention/recovery release blockers must be resolved before real credentials or public deployment.
+The current deployment needs a real Google application to verify OAuth, Picker
+access, folder sharing, Drive concurrency behavior, and production CSP. These
+live-provider checks and an independent security review are still required
+before storing important credentials. Automated builds and tests are not
+production-security certification.
 
-# LockBox
+See [the current architecture](docs/architecture.md) and
+[Google Drive setup and data flow](docs/google-drive-integration.md).

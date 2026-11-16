@@ -1,14 +1,37 @@
 # Lockbox architecture
 
+## Current web runtime
+
+The web application uses Next.js App Router. `src/app` contains the React
+interface and same-origin API routes, and Vercel deploys both as one Next.js
+project. The web runtime does not start the legacy Fastify server and does not
+depend on SQLite or local filesystem persistence.
+
+Google Identity Services authenticates users. The browser requests `openid`,
+`email`, `drive.file`, and `drive.appdata`; the server verifies each bearer
+token through Google's user-info endpoint before accessing Drive. Access tokens
+remain in memory in the browser and are never persisted by the server.
+
+Personal vault records use the user's private Drive app-data area. A separate
+Household vault lives in an owner-selected shared Drive folder. Vault contents
+are encrypted in the browser before storage. Drive is the authoritative
+persistence layer; the app has no separate account database or recovery
+database. The Next.js server is stateless between requests.
+
+Vault writes use Drive file revision checks and fail on detected conflicts.
+Transactions spanning Personal, Household, and membership updates use
+recoverable pending-operation records where needed. Drive ETag and conditional
+write behavior, OAuth configuration, Picker access, folder sharing, and
+production headers still require live-provider validation. Passing automated
+checks is not a production-security certification.
+
+The remaining architecture below describes the former Vite/Fastify/SQLite
+release and associated offline tooling. It is historical and does not describe
+the current Next.js web runtime.
+
+## Historical pre-Next architecture (not the current web runtime)
+
 Phase 7: [current release validation](phase7-release-validation.md) records actual Chrome/Edge runtime and private Caddy evidence, internal fixes and outstanding live Google/UI/physical-device/systemd/independent-review gates. Historical phase statements are not present-release certification.
-
-Phase 6 update: [Current release assessment and recovery rehearsal](phase6-release-assessment.md) supersedes earlier deferred off-device/compaction/helper descriptions. Automatic verified encrypted Drive backups, archived-history retrieval and a private recovery assistant are implemented. Live Google, actual production ingress/browser validation and independent review remain outstanding; no public deployment or production-security certification is claimed.
-
-Phase 5 update: [Recovery and production preparation](phase5-recovery-production.md) is the current authority for login recovery codes, complete encrypted backups, safe restoration, retained history and deployment templates. Older deferred-recovery/database-only descriptions below are historical where superseded. Live Google validation and independent review remain outstanding.
-
-Phases 1–4 are implemented: backend foundation, authentication, client-encrypted vaults and Google Drive OAuth/synchronisation. A real Google connection still requires developer-owned application registration; none is connected in this environment. The existing interface/design is preserved, and the old demo remains only for regression tests.
-
-## Current system
 
 One React/TypeScript/Vite frontend and one Node 24/Fastify/SQLite backend share an origin. Production requires HTTPS; local development uses Vite's API proxy and a loopback backend. No Supabase, Google Sign-In, Drive connection, Redis or mandatory MFA is introduced.
 

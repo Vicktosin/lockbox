@@ -19,6 +19,7 @@ export function VaultSettings({
     [recovery, setRecovery] = useState(''),
     [household, setHousehold] = useState(''),
     [sharingKey, setSharingKey] = useState(''),
+    [inviteEmail, setInviteEmail] = useState(''),
     [error, setError] = useState(''),
     [notice, setNotice] = useState(''),
     [busy, setBusy] = useState(false)
@@ -257,30 +258,37 @@ export function VaultSettings({
               </p>
               {engine.household.ownerId === engine.userId && (
                 <>
-                  {engine.candidates.map((account) => (
-                    <Button
-                      key={account.id}
-                      variant="outline"
-                      disabled={busy}
-                      onClick={() =>
-                        void run(async () => {
-                          await engine.grantHousehold(account.id)
-                          setNotice(
-                            'Account access granted. Transfer the Household key privately to ' +
-                              account.username +
-                              '.',
-                          )
-                        })
-                      }
+                  <form
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      void run(async () => {
+                        await engine.grantHousehold(inviteEmail)
+                        setInviteEmail('')
+                        setNotice(
+                          'Google Drive folder access granted. Transfer the Household key privately to the invited account.',
+                        )
+                      })
+                    }}
+                  >
+                    <Field
+                      label="Invite a Google account"
+                      htmlFor="household-invite-email"
+                      hint="That account must use Google Drive and select this shared folder in Lockbox."
                     >
-                      Grant access to {account.username}
-                    </Button>
-                  ))}
-                  {engine.candidates
-                    .filter(
-                      (account) => account.access && account.access !== 'none',
-                    )
-                    .map((account) => (
+                      <Input
+                        id="household-invite-email"
+                        type="email"
+                        autoComplete="email"
+                        maxLength={320}
+                        value={inviteEmail}
+                        onChange={(event) => setInviteEmail(event.target.value)}
+                        required
+                      />
+                    </Field>
+                    <Button disabled={busy}>Invite to Household vault</Button>
+                  </form>
+                  {engine.candidates.map((account) => (
+                    account.access && account.access !== 'none' ? (
                       <Button
                         key={'revoke-' + account.id}
                         variant="destructive"
@@ -297,7 +305,8 @@ export function VaultSettings({
                       >
                         Remove access for {account.username}
                       </Button>
-                    ))}
+                    ) : null
+                  ))}
                   <Button
                     variant="outline"
                     disabled={busy}

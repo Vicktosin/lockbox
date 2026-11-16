@@ -11,6 +11,8 @@ export default tseslint.config(
       'dist/**',
       'extension/dist/**',
       'releases/**',
+      '.next/**',
+      '.vercel/**',
       'node_modules/**',
       'server/.data/**',
     ],
@@ -37,6 +39,14 @@ export default tseslint.config(
         { patterns: ['**/server/**', '@server/**'] },
       ],
     },
+  },
+  {
+    files: ['src/app/api/**/*.ts'],
+    rules: { 'no-restricted-imports': 'off' },
+  },
+  {
+    files: ['src/app/**/*.tsx', 'src/features/web/**/*.tsx'],
+    rules: { 'react-refresh/only-export-components': 'off' },
   },
   { files: ['scripts/**/*.mjs'], languageOptions: { globals: globals.node } },
   {

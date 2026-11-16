@@ -1,13 +1,6 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import type { StoredVault } from '../../../shared/client-vault.ts'
-import type { VaultEngine } from './engine'
-interface Entry {
-  id: number
-  scope: string
-  revision: number
-  saved_at: number
-}
+import type { VaultEngine, VaultHistoryEntry } from './engine'
 export function VaultHistory({
   engine,
   onChanged,
@@ -15,24 +8,10 @@ export function VaultHistory({
   engine: VaultEngine
   onChanged: () => void
 }) {
-  const [entries, setEntries] = useState<Entry[]>([]),
+  const [entries, setEntries] = useState<VaultHistoryEntry[]>([]),
     [error, setError] = useState(''),
     [notice, setNotice] = useState(''),
     [busy, setBusy] = useState(false)
-  async function request<T>(query = ''): Promise<T> {
-    const r = await fetch('/api/vault/history' + query, {
-      credentials: 'same-origin',
-      cache: 'no-store',
-      signal: AbortSignal.timeout(120000),
-    })
-    if (r.status === 409)
-      throw new Error(
-        'A backup check is already running. Wait a moment, then try again.',
-      )
-    if (!r.ok)
-      throw new Error('History is unavailable. Sign in and refresh your vault.')
-    return r.json()
-  }
   return (
     <section className="panel settings-panel">
       <div className="settings-body">
@@ -49,7 +28,8 @@ export function VaultHistory({
           onClick={() => {
             setBusy(true)
             setError('')
-            void request<{ history: Entry[] }>()
+            void engine
+              .history()
               .then((x) => setEntries(x.history))
               .catch((e) => setError((e as Error).message))
               .finally(() => setBusy(false))
@@ -71,7 +51,8 @@ export function VaultHistory({
                   setBusy(true)
                   setError('')
                   setNotice('')
-                  void request<{ vault: StoredVault }>('?id=' + x.id)
+                  void engine
+                    .historicalVault(x.id)
                     .then((result) => engine.restoreRevision(result.vault))
                     .then(() => {
                       onChanged()

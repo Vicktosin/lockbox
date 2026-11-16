@@ -1,4 +1,6 @@
-﻿export interface Account {
+import type { GoogleWebSession } from '../web/google-auth'
+
+export interface Account {
   id: string
   username: string
   role: 'administrator' | 'member'
@@ -6,6 +8,9 @@
 export interface AccountSession {
   user: Account
   csrfToken: string
+  driveToken?: string
+  driveFolderId?: string
+  google?: GoogleWebSession
 }
 export interface AccountDevice {
   id: string
