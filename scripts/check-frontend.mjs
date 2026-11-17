@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { Window } from 'happy-dom'
 import { createServer } from 'vite'
 import { test } from 'node:test'
+import nextConfig from '../next.config.ts'
 import {
   assertSameOrigin,
   GoogleHttpError,
@@ -65,6 +66,19 @@ async function waitForText(pattern) {
 }
 
 try {
+  await test('Next.js CSP allows Argon2 WebAssembly in vault workers', async () => {
+    const headers = await nextConfig.headers(),
+      csp = headers
+        .flatMap((entry) => entry.headers)
+        .find((header) => header.key === 'Content-Security-Policy')?.value,
+      scriptSrc = csp
+        ?.split(';')
+        .find((directive) => directive.trim().startsWith('script-src '))
+    assert.ok(scriptSrc)
+    assert.match(scriptSrc, /'wasm-unsafe-eval'/)
+    assert.doesNotMatch(scriptSrc, /'unsafe-eval'/)
+  })
+
   await test('Google identity requires a verified bearer token', async () => {
     const calls = []
     globalThis.fetch = async (url, options) => {
