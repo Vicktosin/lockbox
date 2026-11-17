@@ -70,29 +70,37 @@ async function derive(password: string, salt: Uint8Array): Promise<Uint8Array> {
   if (!validMasterPassword(password))
     throw new Error('Use a master passphrase of 15–128 characters.')
   if (typeof Worker === 'undefined') return deriveMasterKey(password, salt)
-  const worker = new Worker(new URL('./kdf.worker.ts', import.meta.url), {
-    type: 'module',
-  })
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      worker.terminate()
-      reject(new Error('Key derivation timed out.'))
-    }, 60000)
-    const finish = () => {
-      clearTimeout(timer)
-      worker.terminate()
-    }
-    worker.onmessage = (event: MessageEvent<{ key?: Uint8Array }>) => {
-      finish()
-      if (event.data.key?.length === 32) resolve(event.data.key)
-      else reject(new Error('Unable to derive vault key.'))
-    }
-    worker.onerror = () => {
-      finish()
-      reject(new Error('Unable to derive vault key.'))
-    }
-    worker.postMessage({ password, salt })
-  })
+  let worker: Worker | undefined
+  try {
+    worker = new Worker(new URL('./kdf.worker.ts', import.meta.url), {
+      type: 'module',
+    })
+    return await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        worker?.terminate()
+        reject(new Error('Key derivation worker timed out.'))
+      }, 60000)
+      const finish = () => {
+        clearTimeout(timer)
+        worker?.terminate()
+      }
+      worker!.onmessage = (event: MessageEvent<{ key?: Uint8Array }>) => {
+        finish()
+        if (event.data.key?.length === 32) resolve(event.data.key)
+        else reject(new Error('Key derivation worker failed.'))
+      }
+      worker!.onerror = () => {
+        finish()
+        reject(new Error('Key derivation worker could not load.'))
+      }
+      worker!.postMessage({ password, salt })
+    })
+  } catch {
+    // Some browsers and development servers cannot load module workers reliably.
+    // Keep setup usable by deriving locally when the worker path fails.
+    worker?.terminate()
+    return deriveMasterKey(password, salt)
+  }
 }
 export interface Keyring {
   v: 1
