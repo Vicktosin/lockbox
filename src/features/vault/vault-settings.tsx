@@ -1,9 +1,34 @@
 import { useState, type FormEvent } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/form'
 import { CopyButton } from '@/components/ui/copy-button'
 import type { VaultEngine } from './engine'
 import { VaultHistory } from './history'
+
+function VisibilityButton({
+  shown,
+  onToggle,
+  label,
+}: {
+  shown: boolean
+  onToggle: () => void
+  label: string
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      aria-label={`${shown ? 'Hide' : 'Show'} ${label}`}
+      aria-pressed={shown}
+      onClick={onToggle}
+    >
+      {shown ? <EyeOff /> : <Eye />}
+    </Button>
+  )
+}
+
 export function VaultSettings({
   engine,
   onChanged,
@@ -23,6 +48,9 @@ export function VaultSettings({
     [error, setError] = useState(''),
     [notice, setNotice] = useState(''),
     [busy, setBusy] = useState(false)
+  const [showCurrent, setShowCurrent] = useState(false),
+    [showPassword, setShowPassword] = useState(false),
+    [showConfirmation, setShowConfirmation] = useState(false)
   const [replacement, setReplacement] = useState(''),
     [replaceConfirmation, setReplaceConfirmation] = useState('')
   async function run(action: () => Promise<void> | void) {
@@ -65,41 +93,50 @@ export function VaultSettings({
           </p>
           <form onSubmit={changeMaster}>
             <Field label="Current master password" htmlFor="master-current">
-              <Input
-                id="master-current"
-                disabled={busy}
-                type="password"
-                autoComplete="off"
-                value={current}
-                onChange={(e) => setCurrent(e.target.value)}
-                required
-              />
+              <div className="password-input-wrap">
+                <Input
+                  id="master-current"
+                  disabled={busy}
+                  type={showCurrent ? 'text' : 'password'}
+                  autoComplete="off"
+                  value={current}
+                  onChange={(e) => setCurrent(e.target.value)}
+                  required
+                />
+                <VisibilityButton shown={showCurrent} onToggle={() => setShowCurrent((shown) => !shown)} label="current master password" />
+              </div>
             </Field>
             <Field label="New master password" htmlFor="master-new">
-              <Input
-                id="master-new"
-                disabled={busy}
-                type="password"
-                autoComplete="new-password"
-                minLength={15}
-                maxLength={256}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+              <div className="password-input-wrap">
+                <Input
+                  id="master-new"
+                  disabled={busy}
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  minLength={15}
+                  maxLength={256}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+                <VisibilityButton shown={showPassword} onToggle={() => setShowPassword((shown) => !shown)} label="new master password" />
+              </div>
             </Field>
             <Field label="Confirm new master password" htmlFor="master-confirm">
-              <Input
-                id="master-confirm"
-                disabled={busy}
-                type="password"
-                autoComplete="new-password"
-                minLength={15}
-                maxLength={256}
-                value={confirmation}
-                onChange={(e) => setConfirmation(e.target.value)}
-                required
-              />
+              <div className="password-input-wrap">
+                <Input
+                  id="master-confirm"
+                  disabled={busy}
+                  type={showConfirmation ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  minLength={15}
+                  maxLength={256}
+                  value={confirmation}
+                  onChange={(e) => setConfirmation(e.target.value)}
+                  required
+                />
+                <VisibilityButton shown={showConfirmation} onToggle={() => setShowConfirmation((shown) => !shown)} label="confirmation password" />
+              </div>
             </Field>
             <Button disabled={busy}>Change master password</Button>
           </form>

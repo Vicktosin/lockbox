@@ -6,7 +6,7 @@ import {
   useState,
   type FormEvent,
 } from 'react'
-import { LockKeyhole, LogOut } from 'lucide-react'
+import { Eye, EyeOff, LockKeyhole, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/form'
 import { CopyButton } from '@/components/ui/copy-button'
@@ -58,6 +58,8 @@ export function VaultGate({
     [mode, setMode] = useState<'unlock' | 'recovery'>('unlock'),
     [password, setPassword] = useState(''),
     [confirmation, setConfirmation] = useState(''),
+    [showPassword, setShowPassword] = useState(false),
+    [showConfirmation, setShowConfirmation] = useState(false),
     [recovery, setRecovery] = useState(''),
     [code, setCode] = useState(''),
     [verification, setVerification] = useState(''),
@@ -74,6 +76,8 @@ export function VaultGate({
     setVerification('')
     setPassword('')
     setConfirmation('')
+    setShowPassword(false)
+    setShowConfirmation(false)
     setRecovery('')
   }, [])
   const lock = useCallback(() => {
@@ -363,31 +367,44 @@ export function VaultGate({
                       htmlFor="vault-master"
                       hint="Use a different passphrase from your login password. At least 15 characters."
                     >
-                      <Input
-                        id="vault-master"
-                        disabled={busy}
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                        minLength={15}
-                        maxLength={256}
-                        autoComplete={
-                          state?.profile && mode === 'unlock'
-                            ? 'off'
-                            : 'new-password'
-                        }
-                      />
+                      <div className="password-input-wrap">
+                        <Input
+                          id="vault-master"
+                          disabled={busy}
+                          type={showPassword ? 'text' : 'password'}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          required
+                          minLength={15}
+                          maxLength={256}
+                          autoComplete={
+                            state?.profile && mode === 'unlock'
+                              ? 'off'
+                              : 'new-password'
+                          }
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={showPassword ? 'Hide master password' : 'Show master password'}
+                          aria-pressed={showPassword}
+                          onClick={() => setShowPassword((shown) => !shown)}
+                        >
+                          {showPassword ? <EyeOff /> : <Eye />}
+                        </Button>
+                      </div>
                     </Field>
                     {(!state?.profile || mode === 'recovery') && (
                       <Field
                         label="Confirm master password"
                         htmlFor="vault-confirmation"
                       >
+                      <div className="password-input-wrap">
                         <Input
                           id="vault-confirmation"
                           disabled={busy}
-                          type="password"
+                          type={showConfirmation ? 'text' : 'password'}
                           value={confirmation}
                           onChange={(e) => setConfirmation(e.target.value)}
                           required
@@ -395,6 +412,17 @@ export function VaultGate({
                           maxLength={256}
                           autoComplete="new-password"
                         />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={showConfirmation ? 'Hide confirmation password' : 'Show confirmation password'}
+                          aria-pressed={showConfirmation}
+                          onClick={() => setShowConfirmation((shown) => !shown)}
+                        >
+                          {showConfirmation ? <EyeOff /> : <Eye />}
+                        </Button>
+                      </div>
                       </Field>
                     )}
                   </>
